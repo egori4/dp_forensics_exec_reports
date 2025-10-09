@@ -818,6 +818,17 @@ class ForensicsDataProcessor:
                 sorted(holistic_stats['top_dest_ips'].items(), key=lambda x: x[1], reverse=True)[:20]
             )
             
+            # Calculate longest attack duration
+            if holistic_stats['duration_stats']:
+                max_duration_seconds = max(holistic_stats['duration_stats'])
+                # Convert seconds to HH:MM:SS format
+                hours = int(max_duration_seconds // 3600)
+                minutes = int((max_duration_seconds % 3600) // 60)
+                seconds = int(max_duration_seconds % 60)
+                holistic_stats['longest_attack_duration'] = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                holistic_stats['longest_attack_duration'] = "00:00:00"
+            
             logger.info(f"Holistic analysis complete: {processed_rows:,} total events processed")
             return holistic_stats
             

@@ -292,3 +292,49 @@ PERFORMANCE_THRESHOLDS = {
     'large_file_mb': 500,     # Files 100-500MB
     'max_rows_warning': 1000000,  # Warn if over 1M rows
 }
+
+# Volume unit configuration
+VOLUME_UNIT = 'TB'  # Options: 'MB', 'GB', 'TB'
+VOLUME_UNIT_CONFIGS = {
+    'MB': {
+        'divider': 1,           # Mbits to MB: divide by 1 (already in Mbits, then divide by 8 for bytes)
+        'display_name': 'MB',
+        'chart_title': 'Aggregate Attack Volume (MB)',
+        'stats_label': 'Aggregate Attack Volume (MB)'
+    },
+    'GB': {
+        'divider': 1000,        # Mbits to GB: divide by 1000, then by 8 for bytes
+        'display_name': 'GB', 
+        'chart_title': 'Aggregate Attack Volume (GB)',
+        'stats_label': 'Aggregate Attack Volume (GB)'
+    },
+    'TB': {
+        'divider': 1000000,     # Mbits to TB: divide by 1,000,000, then by 8 for bytes
+        'display_name': 'TB',
+        'chart_title': 'Aggregate Attack Volume (TB)', 
+        'stats_label': 'Aggregate Attack Volume (TB)'
+    }
+}
+
+# Packet unit configuration
+PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
+PACKET_UNIT_CONFIGS = {
+    'M': {
+        'divider': 1_000_000,   # Convert to millions
+        'display_name': 'M',
+        'chart_title': 'Aggregate Attack Packets (Millions)',
+        'stats_label': 'Aggregate Attack Packets (Millions)'
+    },
+    'B': {
+        'divider': 1_000_000_000,  # Convert to billions
+        'display_name': 'B',
+        'chart_title': 'Aggregate Attack Packets (Billions)', 
+        'stats_label': 'Aggregate Attack Packets (Billions)'
+    },
+    '': {
+        'divider': 1,           # No conversion
+        'display_name': '',
+        'chart_title': 'Aggregate Attack Packets',
+        'stats_label': 'Aggregate Attack Packets'
+    }
+}

@@ -296,7 +296,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 ## 🔄 Version History
 
-### v1.0.0 (Current)
+### v1.0.0
 - Initial release
 - Support for CSV and ZIP input files
 - HTML and PDF report generation

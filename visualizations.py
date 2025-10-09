@@ -14,7 +14,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from config import (
-    RADWARE_COLORS, CHART_COLORS, CHART_CONFIG, CHART_LAYOUT
+    RADWARE_COLORS, CHART_COLORS, CHART_CONFIG, CHART_LAYOUT, 
+    VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS
 )
 from utils import format_number, calculate_percentage
 
@@ -177,64 +178,96 @@ class ForensicsVisualizer:
             months = list(monthly_data['months'].keys())
             month_labels = [monthly_data['months'][month]['month_name'] for month in months]
             
-            # Extract volume metrics
+            # Extract volume and packet metrics
             total_mbits = [monthly_data['months'][month]['total_mbits'] for month in months]
+            total_packets = [monthly_data['months'][month]['total_packets'] for month in months]
             max_pps = [monthly_data['months'][month]['max_pps'] for month in months]
             max_bps = [monthly_data['months'][month]['max_bps'] for month in months]
             
-            # Create subplots
+            # Convert volume to configured unit
+            volume_config = VOLUME_UNIT_CONFIGS[VOLUME_UNIT]
+            # Convert Mbits to bytes first (divide by 8), then to target unit
+            total_volume = [mbits / 8 / volume_config['divider'] for mbits in total_mbits]
+            
+            # Convert packets to configured unit
+            packet_config = PACKET_UNIT_CONFIGS[PACKET_UNIT]
+            converted_packets = [packets / packet_config['divider'] for packets in total_packets]
+            
+            # Convert max_bps to Gbps
+            max_gbps = [bps / 1_000_000_000 for bps in max_bps]
+            
+            # Create subplots with 4 rows now
             fig = make_subplots(
-                rows=3, cols=1,
-                subplot_titles=('Total Attack Volume (Mbits)', 'Peak Packets per Second', 'Peak Bits per Second'),
-                vertical_spacing=0.08
+                rows=4, cols=1,
+                subplot_titles=(
+                    volume_config['chart_title'], 
+                    packet_config['chart_title'],
+                    'Attack Max PPS', 
+                    'Attack Max Gbps'
+                ),
+                vertical_spacing=0.06
             )
             
-            # Total Mbits
+            # Total Volume in configured unit (Row 1)
             fig.add_trace(go.Scatter(
                 x=month_labels,
-                y=total_mbits,
+                y=total_volume,
                 mode='lines+markers',
-                line=dict(color=self.colors['primary'], width=2),
-                marker=dict(size=6),
-                name='Total Mbits',
-                hovertemplate='<b>%{x}</b><br>Total Mbits: %{y:,.1f}<extra></extra>'
+                line=dict(color=self.colors['primary'], width=3),
+                marker=dict(size=8, color=self.colors['primary']),
+                name=f'Total {volume_config["display_name"]}',
+                hovertemplate=f'<b>%{{x}}</b><br>Total {volume_config["display_name"]}: %{{y:,.2f}}<extra></extra>'
             ), row=1, col=1)
             
-            # Max PPS
+            # Total Packets in configured unit (Row 2) 
+            fig.add_trace(go.Scatter(
+                x=month_labels,
+                y=converted_packets,
+                mode='lines+markers',
+                line=dict(color=self.colors['secondary'], width=3),
+                marker=dict(size=8, color=self.colors['secondary']),
+                name=f'Total Packets {packet_config["display_name"]}',
+                hovertemplate=f'<b>%{{x}}</b><br>Packets {packet_config["display_name"]}: %{{y:,.2f}}<extra></extra>'
+            ), row=2, col=1)
+            
+            # Max PPS (Row 3)
             fig.add_trace(go.Scatter(
                 x=month_labels,
                 y=max_pps,
                 mode='lines+markers',
-                line=dict(color=self.colors['accent'], width=2),
-                marker=dict(size=6),
+                line=dict(color=self.colors['accent'], width=3),
+                marker=dict(size=8, color=self.colors['accent']),
                 name='Max PPS',
                 hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
-            ), row=2, col=1)
-            
-            # Max BPS
-            fig.add_trace(go.Scatter(
-                x=month_labels,
-                y=max_bps,
-                mode='lines+markers',
-                line=dict(color=self.colors['success'], width=2),
-                marker=dict(size=6),
-                name='Max BPS',
-                hovertemplate='<b>%{x}</b><br>Max BPS: %{y:,.0f}<extra></extra>'
             ), row=3, col=1)
             
-            # Update layout
-            fig.update_layout(
-                title={
+            # Max Gbps (Row 4)
+            fig.add_trace(go.Scatter(
+                x=month_labels,
+                y=max_gbps,
+                mode='lines+markers',
+                line=dict(color=self.colors['success'], width=3),
+                marker=dict(size=8, color=self.colors['success']),
+                name='Max Gbps',
+                hovertemplate='<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
+            ), row=4, col=1)
+            
+            # Update layout to match monthly events styling
+            layout = self.base_layout.copy()
+            layout.update({
+                'title': {
                     'text': 'Attack Volume Trends Over Time',
                     'font': {'size': 18, 'color': self.colors['dark']},
                     'x': 0.5
                 },
-                height=800,
-                showlegend=False,
-                font=self.base_layout['font']
-            )
+                'height': 1000,  # Increased height for 4 subplots
+                'showlegend': False,
+                'hovermode': 'x unified'
+            })
             
-            # Update axes
+            fig.update_layout(layout)
+            
+            # Update axes to match monthly events styling
             fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0')
             fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0')
             
@@ -550,20 +583,28 @@ class ForensicsVisualizer:
         """
         try:
             date_range = holistic_data.get('date_range', {})
+            volume_config = VOLUME_UNIT_CONFIGS[VOLUME_UNIT]
+            packet_config = PACKET_UNIT_CONFIGS[PACKET_UNIT]
+            
+            # Convert volume to configured unit (Mbits to bytes first, then to target unit)
+            total_volume_converted = holistic_data.get('total_mbits', 0) / 8 / volume_config['divider']
+            
+            # Convert packets to configured unit
+            total_packets_converted = holistic_data.get('total_packets', 0) / packet_config['divider']
             
             stats = [
                 ("Total Security Events", format_number(holistic_data.get('total_events', 0))),
-                ("Analysis Period", f"{date_range.get('start', 'Unknown')} to {date_range.get('end', 'Unknown')}"),
                 ("Total Days", format_number(date_range.get('days', 0))),
-                ("Unique Source IPs", format_number(holistic_data.get('unique_source_ips', 0))),
-                ("Unique Destination IPs", format_number(holistic_data.get('unique_dest_ips', 0))),
+                ("Unique Attack Source IPs", format_number(holistic_data.get('unique_source_ips', 0))),
+                ("Unique Attacked Destination IPs", format_number(holistic_data.get('unique_dest_ips', 0))),
                 ("Unique Attack Types", format_number(len(holistic_data.get('attack_types', {})))),
-                ("#1 Attack Peak Packets/Second", format_number(holistic_data.get('max_pps', 0))),
-                ("#1 Attack Peak Volume (Gbps)", format_number(round(holistic_data.get('max_bps', 0) / 1_000_000_000, 2))),
-                ("Aggregate Attack Volume (GB)", f"{round(holistic_data.get('total_mbits', 0) / 8_000, 2):,.2f}"),
-                ("Aggregate Attack Packets (Millions)", f"{round(holistic_data.get('total_packets', 0) / 1_000_000, 2):,.2f}"),
-                ("Complete Months for Trends", format_number(len(monthly_data.get('months', {})))),
-                ("Longest Attack Duration", format_number(holistic_data.get('longest_attack_duration', 0)))
+                ("Attack Max PPS", format_number(holistic_data.get('max_pps', 0))),
+                ("Attack Max Gbps", format_number(round(holistic_data.get('max_bps', 0) / 1_000_000_000, 2))),
+                (volume_config['stats_label'], f"{total_volume_converted:,.2f}"),
+                (packet_config['stats_label'], f"{total_packets_converted:,.2f}"),
+                ("Longest Attack Duration", holistic_data.get('longest_attack_duration', '00:00:00')),
+                ("Complete Months for Trends", format_number(len(monthly_data.get('months', {}))))
+
             ]
             html = """
             <div class="stats-grid">
