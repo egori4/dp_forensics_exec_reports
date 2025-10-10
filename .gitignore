@@ -1,6 +1,6 @@
 report_files/*
-forensics_input/*
 !report_files/.gitkeep
+forensics_input/*
 !forensics_input/.gitkeep
 __pycache__/
 
@@ -22,3 +22,4 @@ build/
 *.bak
 *.swp
 *.swo
+tmp/

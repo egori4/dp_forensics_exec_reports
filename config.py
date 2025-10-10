@@ -27,9 +27,15 @@ CHUNK_SIZE = 50000  # Number of rows to process at once
 MAX_MEMORY_USAGE_GB = 2  # Maximum memory usage in GB before warning
 
 # Data filtering options
-EXCLUDE_THREAT_CATEGORIES = [
-    'Anomalies'  # Exclude anomaly detection records from analysis
-]
+# Dynamic filters - exclude rows where column equals any of the specified values
+# Multiple filters use AND logic (row must match ALL conditions to be excluded)
+EXCLUDE_FILTERS = {
+    # 'Threat Category': ['Anomalies'],  # Exclude anomaly detection records from analysis
+    'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policies
+    # 'Attack Name': ['Health Check', 'Benign Traffic'],  # Example: exclude specific attacks
+    # 'Risk': ['Low'],  # Example: exclude low-risk events
+    # 'Direction': ['Internal'],  # Example: exclude internal traffic
+}
 
 # Expected CSV columns (some may be missing depending on device)
 EXPECTED_COLUMNS = [
@@ -294,7 +300,7 @@ PERFORMANCE_THRESHOLDS = {
 }
 
 # Volume unit configuration
-VOLUME_UNIT = 'TB'  # Options: 'MB', 'GB', 'TB'
+VOLUME_UNIT = 'MB'  # Options: 'MB', 'GB', 'TB'
 VOLUME_UNIT_CONFIGS = {
     'MB': {
         'divider': 1,           # Mbits to MB: divide by 1 (already in Mbits, then divide by 8 for bytes)
@@ -317,7 +323,7 @@ VOLUME_UNIT_CONFIGS = {
 }
 
 # Packet unit configuration
-PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
+PACKET_UNIT = ''  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
 PACKET_UNIT_CONFIGS = {
     'M': {
         'divider': 1_000_000,   # Convert to millions

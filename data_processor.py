@@ -19,7 +19,7 @@ from utils import (
     check_memory_usage, format_file_size, validate_csv_structure,
     detect_file_encoding, format_number
 )
-from config import CHUNK_SIZE, REQUIRED_COLUMNS, EXPECTED_COLUMNS, EXCLUDE_THREAT_CATEGORIES
+from config import CHUNK_SIZE, REQUIRED_COLUMNS, EXPECTED_COLUMNS, EXCLUDE_FILTERS
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +137,9 @@ class ForensicsDataProcessor:
             'Radware ID': pl.Utf8,     # String to handle mixed ID formats
         }
     
-    def _filter_threat_categories(self, chunk: pl.DataFrame) -> pl.DataFrame:
+    def _apply_data_filters(self, chunk: pl.DataFrame) -> pl.DataFrame:
         """
-        Filter out excluded threat categories from the data chunk.
+        Filter out excluded data based on dynamic filters.
         
         Args:
             chunk: Data chunk to filter
@@ -147,17 +147,18 @@ class ForensicsDataProcessor:
         Returns:
             Filtered data chunk
         """
-        if 'Threat Category' not in chunk.columns or not EXCLUDE_THREAT_CATEGORIES:
-            return chunk
-        
         try:
-            # Filter out excluded threat categories
-            for excluded_category in EXCLUDE_THREAT_CATEGORIES:
-                chunk = chunk.filter(pl.col('Threat Category') != excluded_category)
+            # Apply dynamic filters
+            if EXCLUDE_FILTERS:
+                for column_name, excluded_values in EXCLUDE_FILTERS.items():
+                    if column_name in chunk.columns and excluded_values:
+                        # Filter out rows where column value is in the excluded list
+                        chunk = chunk.filter(~pl.col(column_name).is_in(excluded_values))
             
             return chunk
+            
         except Exception as e:
-            logger.warning(f"Failed to filter threat categories: {e}")
+            logger.warning(f"Failed to apply data filters: {e}")
             return chunk
     
     def _create_column_mapping(self, columns: List[str]) -> Dict[str, str]:
@@ -292,8 +293,8 @@ class ForensicsDataProcessor:
                             offset += chunk_size
                             continue
                         
-                        # Filter out excluded threat categories
-                        chunk = self._filter_threat_categories(chunk)
+                        # Filter out excluded data
+                        chunk = self._apply_data_filters(chunk)
                         
                         if len(chunk) == 0:
                             offset += chunk_size
@@ -371,8 +372,8 @@ class ForensicsDataProcessor:
                             # Store original chunk size before filtering
                             original_chunk_size = len(chunk)
                             
-                            # Filter out excluded threat categories
-                            chunk = self._filter_threat_categories(chunk)
+                            # Filter out excluded data
+                            chunk = self._apply_data_filters(chunk)
                             
                             # Parse dates in this chunk
                             dates = []
@@ -537,8 +538,8 @@ class ForensicsDataProcessor:
                     # Store original chunk size before filtering
                     original_chunk_size = len(chunk)
                     
-                    # Filter out excluded threat categories
-                    chunk = self._filter_threat_categories(chunk)
+                    # Filter out excluded data
+                    chunk = self._apply_data_filters(chunk)
                     
                     # Filter chunk for this month's data
                     month_chunk = self._filter_chunk_by_date(chunk, month_start, month_end)
@@ -788,8 +789,8 @@ class ForensicsDataProcessor:
                         # Store original chunk size before filtering
                         original_chunk_size = len(chunk)
                         
-                        # Filter out excluded threat categories
-                        chunk = self._filter_threat_categories(chunk)
+                        # Filter out excluded data
+                        chunk = self._apply_data_filters(chunk)
                         
                         self._update_holistic_stats(holistic_stats, chunk)
                         processed_rows += len(chunk)

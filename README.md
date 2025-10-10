@@ -296,14 +296,12 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 ## 🔄 Version History
 
-### v1.0.0
-- Initial release
-- Support for CSV and ZIP input files
-- HTML and PDF report generation
-- Interactive Plotly visualizations
-- Memory-efficient processing
-- Cross-platform compatibility
-- Batch processing support
+### Version History
+
+| Version | Features                                                                                   |
+|---------|--------------------------------------------------------------------------------------------|
+| v1.0.1  | - Added filtering. Use new EXCLUDE_FILTERS var under config.py |
+| v1.0.0  | - Initial release<br>- Support for CSV and ZIP input files<br>- HTML and PDF report generation<br>- Interactive Plotly visualizations<br>- Memory-efficient processing<br>- Cross-platform compatibility<br>- Batch processing support |
 
 ---
 
