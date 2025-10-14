@@ -3,6 +3,23 @@ Visualization module for creating interactive charts and graphs.
 
 This module creates professional, interactive visualizations using Plotly
 with Radware branding and styling for both technical and sales audiences.
+
+EXPANDABLE STAT CARDS:
+This module includes functionality for creating expandable stat cards that 
+show detailed information when clicked. Use cases include:
+- Longest Attack Duration (shows full attack details)
+- Top Source IP (shows attack breakdown)
+- Highest Volume Attack (shows attack characteristics)
+
+To create custom expandable cards:
+    custom_fields = [
+        ('Field Name', 'Field Value'),
+        ('Source IP', '192.168.1.100'),
+        ('Volume (MB)', '1,250.5')
+    ]
+    html = visualizer.create_expandable_stat_card_for_custom_data(
+        "Card Title", "Main Value", custom_fields, "unique-id"
+    )
 """
 
 import logging
@@ -15,7 +32,8 @@ from datetime import datetime, timedelta
 
 from config import (
     RADWARE_COLORS, CHART_COLORS, CHART_CONFIG, CHART_LAYOUT, 
-    VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS
+    VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS,
+    get_bandwidth_unit_config, CHART_PLOTLYJS_MODE
 )
 from utils import format_number, calculate_percentage
 
@@ -34,6 +52,18 @@ class ForensicsVisualizer:
         self.base_layout = CHART_LAYOUT.copy()
         
         logger.info("Initialized ForensicsVisualizer with Radware styling")
+    
+    def _convert_to_html(self, fig):
+        """
+        Convert Plotly figure to HTML with optimized Plotly inclusion.
+        
+        Args:
+            fig: Plotly figure object
+            
+        Returns:
+            HTML string of the chart
+        """
+        return fig.to_html(config=CHART_CONFIG, include_plotlyjs=CHART_PLOTLYJS_MODE)
     
     def create_monthly_events_trend(self, monthly_data: Dict[str, Any]) -> str:
         """
@@ -89,7 +119,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create monthly events trend: {e}")
@@ -117,7 +147,12 @@ class ForensicsVisualizer:
             all_attacks = {}
             for month in months:
                 attacks = monthly_data['months'][month]['attack_types']
-                for attack, count in attacks.items():
+                for attack, attack_info in attacks.items():
+                    if isinstance(attack_info, dict):
+                        count = attack_info.get('count', 0)
+                    else:
+                        # Handle old format (just count)
+                        count = attack_info
                     all_attacks[attack] = all_attacks.get(attack, 0) + count
             
             top_attacks = sorted(all_attacks.items(), key=lambda x: x[1], reverse=True)[:top_n]
@@ -130,7 +165,13 @@ class ForensicsVisualizer:
                 values = []
                 for month in months:
                     attacks = monthly_data['months'][month]['attack_types']
-                    values.append(attacks.get(attack_name, 0))
+                    attack_info = attacks.get(attack_name, 0)
+                    if isinstance(attack_info, dict):
+                        count = attack_info.get('count', 0)
+                    else:
+                        # Handle old format (just count)
+                        count = attack_info
+                    values.append(count)
                 
                 fig.add_trace(go.Bar(
                     x=month_labels,
@@ -155,7 +196,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create attack types stacked bar: {e}")
@@ -193,8 +234,9 @@ class ForensicsVisualizer:
             packet_config = PACKET_UNIT_CONFIGS[PACKET_UNIT]
             converted_packets = [packets / packet_config['divider'] for packets in total_packets]
             
-            # Convert max_bps to Gbps
-            max_gbps = [bps / 1_000_000_000 for bps in max_bps]
+            # Convert max_bps to configured bandwidth unit
+            bandwidth_config = get_bandwidth_unit_config()
+            max_bandwidth_values = [bps / bandwidth_config['divider'] for bps in max_bps]
             
             # Create subplots with 4 rows now
             fig = make_subplots(
@@ -203,7 +245,7 @@ class ForensicsVisualizer:
                     volume_config['chart_title'], 
                     packet_config['chart_title'],
                     'Attack Max PPS', 
-                    'Attack Max Gbps'
+                    bandwidth_config['chart_title']
                 ),
                 vertical_spacing=0.06
             )
@@ -241,15 +283,15 @@ class ForensicsVisualizer:
                 hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
             ), row=3, col=1)
             
-            # Max Gbps (Row 4)
+            # Max bandwidth (Row 4)
             fig.add_trace(go.Scatter(
                 x=month_labels,
-                y=max_gbps,
+                y=max_bandwidth_values,
                 mode='lines+markers',
                 line=dict(color=self.colors['success'], width=3),
                 marker=dict(size=8, color=self.colors['success']),
-                name='Max Gbps',
-                hovertemplate='<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
+                name=bandwidth_config['chart_name'],
+                hovertemplate=bandwidth_config['hover_template']
             ), row=4, col=1)
             
             # Update layout to match monthly events styling
@@ -271,7 +313,7 @@ class ForensicsVisualizer:
             fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0')
             fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0')
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create attack volume trends: {e}")
@@ -336,7 +378,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create hourly heatmap: {e}")
@@ -360,7 +402,16 @@ class ForensicsVisualizer:
                 return self._create_no_data_chart("Attack Type Distribution", "No attack data available")
             
             # Get top attack types
-            sorted_attacks = sorted(attack_types.items(), key=lambda x: x[1], reverse=True)
+            attack_counts = {}
+            for attack, attack_info in attack_types.items():
+                if isinstance(attack_info, dict):
+                    count = attack_info.get('count', 0)
+                else:
+                    # Handle old format (just count)
+                    count = attack_info
+                attack_counts[attack] = count
+            
+            sorted_attacks = sorted(attack_counts.items(), key=lambda x: x[1], reverse=True)
             top_attacks = sorted_attacks[:top_n]
             
             # Group remaining attacks as "Others"
@@ -399,7 +450,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create attack type pie chart: {e}")
@@ -455,7 +506,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create top source IPs bar chart: {e}")
@@ -504,7 +555,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create protocol distribution chart: {e}")
@@ -564,7 +615,7 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+            return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create daily timeline chart: {e}")
@@ -592,29 +643,127 @@ class ForensicsVisualizer:
             # Convert packets to configured unit
             total_packets_converted = holistic_data.get('total_packets', 0) / packet_config['divider']
             
+            # Prepare stats with special handling for expandable fields
+            # Regular stats (non-expandable)
             stats = [
                 ("Total Security Events", format_number(holistic_data.get('total_events', 0))),
                 ("Total Days", format_number(date_range.get('days', 0))),
-                ("Unique Attack Source IPs", format_number(holistic_data.get('unique_source_ips', 0))),
-                ("Unique Attacked Destination IPs", format_number(holistic_data.get('unique_dest_ips', 0))),
-                ("Unique Attack Types", format_number(len(holistic_data.get('attack_types', {})))),
-                ("Attack Max PPS", format_number(holistic_data.get('max_pps', 0))),
-                ("Attack Max Gbps", format_number(round(holistic_data.get('max_bps', 0) / 1_000_000_000, 2))),
                 (volume_config['stats_label'], f"{total_volume_converted:,.2f}"),
-                (packet_config['stats_label'], f"{total_packets_converted:,.2f}"),
-                ("Longest Attack Duration", holistic_data.get('longest_attack_duration', '00:00:00')),
-                ("Complete Months for Trends", format_number(len(monthly_data.get('months', {}))))
-
+                (packet_config['stats_label'], f"{total_packets_converted:,.2f}")
             ]
+            
+            # Expandable stats data
+            expandable_stats = [
+                {
+                    'label': 'Unique Attack Source IPs',
+                    'value': format_number(holistic_data.get('unique_source_ips', 0)),
+                    'details': holistic_data.get('unique_source_ips_list', []),
+                    'id': 'unique-source-ips-details',
+                    'type': 'list'
+                },
+                {
+                    'label': 'Unique Attacked Destination IPs', 
+                    'value': format_number(holistic_data.get('unique_dest_ips', 0)),
+                    'details': holistic_data.get('unique_dest_ips_list', []),
+                    'id': 'unique-dest-ips-details',
+                    'type': 'list'
+                },
+                {
+                    'label': 'Unique Attack Types',
+                    'value': format_number(len(holistic_data.get('attack_types', {}))),
+                    'details': holistic_data.get('attack_types_details', []),
+                    'id': 'unique-attack-types-details', 
+                    'type': 'attack_types_details'
+                },
+                {
+                    'label': 'Attack Max PPS',
+                    'value': format_number(holistic_data.get('max_pps', 0)),
+                    'details': holistic_data.get('max_pps_details'),
+                    'id': 'max-pps-details',
+                    'type': 'attack_details'
+                },
+                {
+                    'label': get_bandwidth_unit_config()['stats_label'], 
+                    'value': f"{format_number(round(holistic_data.get('max_bps', 0) / get_bandwidth_unit_config()['divider'], 2))} {get_bandwidth_unit_config()['unit_name']}",
+                    'details': holistic_data.get('max_bps_details'),
+                    'id': 'max-bps-details',
+                    'type': 'attack_details'
+                },
+                {
+                    'label': 'Complete Months for Trends',
+                    'value': format_number(len(monthly_data.get('months', {}))),
+                    'details': self._convert_month_keys_to_names(monthly_data.get('months', {})) if monthly_data.get('months') else [],
+                    'id': 'months-trends-details',
+                    'type': 'list'
+                }
+            ]
+            
+            # Special expandable field for Longest Attack Duration
+            longest_attack_details = holistic_data.get('longest_attack_details')
+            longest_attack_duration = holistic_data.get('longest_attack_duration', '00:00:00')
+            
             html = """
             <div class="stats-grid">
             """
             
+            # Add regular (non-expandable) stats
             for label, value in stats:
                 html += f"""
                 <div class="stat-card">
                     <div class="stat-value">{value}</div>
                     <div class="stat-label">{label}</div>
+                </div>
+                """
+            
+            # Add expandable stats
+            for stat_config in expandable_stats:
+                if stat_config['type'] == 'list' and stat_config['details']:
+                    # Create list of (display_name, value) tuples for list-type expandables
+                    details_list = [(item, item) for item in stat_config['details']]
+                    html += self.create_expandable_stat_card_for_custom_data(
+                        stat_config['label'],
+                        stat_config['value'],
+                        details_list,
+                        stat_config['id']
+                    )
+                elif stat_config['type'] == 'attack_types_details' and stat_config['details']:
+                    # For attack types with threat categories, format as (threat_category, attack_name) tuples
+                    html += self.create_expandable_stat_card_for_custom_data(
+                        stat_config['label'],
+                        stat_config['value'],
+                        stat_config['details'],  # Already in (threat_category, attack_name) format
+                        stat_config['id']
+                    )
+                elif stat_config['type'] == 'attack_details' and stat_config['details']:
+                    # For attack details, use the existing method
+                    html += self._create_expandable_stat_card(
+                        stat_config['label'],
+                        stat_config['value'],
+                        stat_config['details'],
+                        stat_config['id']
+                    )
+                else:
+                    # Fallback to regular card if no details available
+                    html += f"""
+                    <div class="stat-card">
+                        <div class="stat-value">{stat_config['value']}</div>
+                        <div class="stat-label">{stat_config['label']}</div>
+                    </div>
+                    """
+            
+            # Add expandable Longest Attack Duration card
+            if longest_attack_details:
+                html += self._create_expandable_stat_card(
+                    "Longest Attack Duration",
+                    longest_attack_duration,
+                    longest_attack_details,
+                    "longest-attack-details"
+                )
+            else:
+                html += f"""
+                <div class="stat-card">
+                    <div class="stat-value">{longest_attack_duration}</div>
+                    <div class="stat-label">Longest Attack Duration</div>
                 </div>
                 """
             
@@ -664,7 +813,7 @@ class ForensicsVisualizer:
         
         fig.update_layout(layout)
         
-        return fig.to_html(config=CHART_CONFIG, include_plotlyjs='inline')
+        return self._convert_to_html(fig)
     
     def _create_error_chart(self, title: str, error: str) -> str:
         """
@@ -685,3 +834,176 @@ class ForensicsVisualizer:
             </div>
         </div>
         """
+    
+    def _create_expandable_stat_card(self, label: str, value: str, details_data: Dict[str, Any], details_id: str) -> str:
+        """
+        Create an expandable stat card with detailed information.
+        
+        Args:
+            label: Display label for the stat
+            value: Main value to display
+            details_data: Dictionary containing detailed information
+            details_id: Unique ID for the expandable section
+            
+        Returns:
+            HTML string for expandable stat card
+        """
+        if not details_data or not details_data.get('details'):
+            # Return normal stat card if no details available
+            return f"""
+                <div class="stat-card">
+                    <div class="stat-value">{value}</div>
+                    <div class="stat-label">{label}</div>
+                </div>
+                """
+        
+        # Extract relevant details for display
+        attack_details = details_data['details']
+        
+        # Define the fields we want to display
+        display_fields = [
+            ('Start Time', 'Start Time'),
+            ('End Time', 'End Time'),
+            ('Device IP Address', 'Device IP Address'),
+            ('Attack Name', 'Attack Name'),
+            ('Policy Name', 'Policy Name'),
+            ('Action', 'Action'),
+            ('Attack ID', 'Attack ID'),
+            ('Source IP Address', 'Source IP Address'),
+            ('Source Port', 'Source Port'),
+            ('Destination IP Address', 'Destination IP Address'),
+            ('Protocol', 'Protocol'),
+            ('Max pps', 'Max pps'),
+            ('Max bps', 'Max bps')
+        ]
+        
+        # Build details HTML
+        details_html = ""
+        for display_name, field_key in display_fields:
+            field_value = attack_details.get(field_key, 'N/A')
+            if field_value is None or str(field_value) == 'nan':
+                field_value = 'N/A'
+            details_html += f"""
+                <div class="detail-row">
+                    <span class="detail-label">{display_name}:</span>
+                    <span class="detail-value">{field_value}</span>
+                </div>
+            """
+        
+        return f"""
+            <div class="stat-card expandable-card">
+                <div class="stat-value expandable-trigger" onclick="toggleDetails('{details_id}')" style="cursor: pointer; position: relative;">
+                    {value}
+                    <span class="expand-icon" id="{details_id}-icon">▼</span>
+                </div>
+                <div class="stat-label">{label} <small style="color: #6c757d;">(click to expand)</small></div>
+                <div id="{details_id}" class="attack-details">
+                    <div class="details-container">
+                        <h4 style="margin: 0 0 10px 0; color: #003f7f; font-size: 14px;">Attack Details</h4>
+                        {details_html}
+                    </div>
+                </div>
+            </div>
+        """
+    
+    def create_expandable_stat_card_for_custom_data(self, label: str, value: str, custom_fields: List[tuple], details_id: str) -> str:
+        """
+        Create an expandable stat card with custom field data.
+        
+        This is a helper method for creating expandable cards for other fields like 
+        "Top Source IP", "Highest Volume Attack", etc.
+        
+        Args:
+            label: Display label for the stat
+            value: Main value to display  
+            custom_fields: List of (display_name, field_value) tuples for the details
+            details_id: Unique ID for the expandable section
+            
+        Returns:
+            HTML string for expandable stat card
+            
+        Example usage:
+            custom_fields = [
+                ('Attack Name', 'DDoS Flood'),
+                ('Source IP', '192.168.1.100'),
+                ('Volume (MB)', '1,250.5'),
+                ('Duration', '2h:15m:30s')
+            ]
+            html = visualizer.create_expandable_stat_card_for_custom_data(
+                "Highest Volume Attack", "1,250.5 MB", custom_fields, "highest-volume-attack"
+            )
+        """
+        if not custom_fields:
+            # Return normal stat card if no details available
+            return f"""
+                <div class="stat-card">
+                    <div class="stat-value">{value}</div>
+                    <div class="stat-label">{label}</div>
+                </div>
+                """
+        
+        # Check if this is a simple list (all tuples have same display_name as field_value)
+        is_simple_list = all(display_name == field_value for display_name, field_value in custom_fields)
+        
+        if is_simple_list:
+            # Create compact list format - single block with all values (no duplicate label)
+            values_list = [str(field_value) for display_name, field_value in custom_fields if field_value and str(field_value) != 'N/A']
+            details_html = f"""
+                <div class="detail-value" style="white-space: pre-line; margin: 0; padding: 0;">{chr(10).join(values_list)}</div>
+            """
+        else:
+            # Build details HTML from custom fields (for non-list data)
+            details_html = ""
+            for display_name, field_value in custom_fields:
+                if field_value is None or str(field_value) == 'nan':
+                    field_value = 'N/A'
+                details_html += f"""
+                    <div class="detail-row">
+                        <span class="detail-label">{display_name}:</span>
+                        <span class="detail-value">{field_value}</span>
+                    </div>
+                """
+        
+        return f"""
+            <div class="stat-card expandable-card">
+                <div class="stat-value expandable-trigger" onclick="toggleDetails('{details_id}')" style="cursor: pointer; position: relative;">
+                    {value}
+                    <span class="expand-icon" id="{details_id}-icon">▼</span>
+                </div>
+                <div class="stat-label">{label} <small style="color: #6c757d;">(click to expand)</small></div>
+                <div id="{details_id}" class="attack-details">
+                    <div class="details-container">
+                        <h4 style="margin: 0 0 10px 0; color: #003f7f; font-size: 14px;">Details</h4>
+                        {details_html}
+                    </div>
+                </div>
+            </div>
+        """
+    
+    def _convert_month_keys_to_names(self, months_dict: dict) -> list:
+        """
+        Convert month keys like '2025-08' to readable month names like 'August 2025'.
+        
+        Args:
+            months_dict: Dictionary with month keys in YYYY-MM format
+            
+        Returns:
+            List of readable month names sorted chronologically
+        """
+        import datetime
+        
+        month_names = []
+        for month_key in sorted(months_dict.keys()):
+            try:
+                # Parse the month key (format: YYYY-MM)
+                year, month = month_key.split('-')
+                # Create a date object to get the month name
+                date_obj = datetime.date(int(year), int(month), 1)
+                # Format as "Month Year" (e.g., "August 2025")
+                month_name = date_obj.strftime('%B %Y')
+                month_names.append(month_name)
+            except (ValueError, IndexError):
+                # Fallback to original key if parsing fails
+                month_names.append(month_key)
+        
+        return month_names

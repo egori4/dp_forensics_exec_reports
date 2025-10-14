@@ -47,7 +47,9 @@ class ForensicsDataProcessor:
         self.complete_months = []
         self.column_mapping = {}
         
-        logger.info(f"Initializing processor for {file_path.name}")
+        # Handle both string and Path objects
+        file_name = file_path.name if hasattr(file_path, 'name') else str(file_path)
+        logger.info(f"Initializing processor for {file_name}")
     
     def analyze_file_structure(self) -> Dict[str, Any]:
         """
@@ -178,10 +180,11 @@ class ForensicsDataProcessor:
             'Start Time': ['Start Time', 'StartTime', 'start_time', 'Start_Time'],
             'End Time': ['End Time', 'EndTime', 'end_time', 'End_Time'],
             'Attack Name': ['Attack Name', 'AttackName', 'attack_name', 'Attack_Name'],
+            'Threat Category': ['Threat Category', 'ThreatCategory', 'threat_category', 'Threat_Category'],
             'Source IP Address': ['Source IP Address', 'Source IP', 'SourceIP', 'source_ip'],
             'Destination IP Address': ['Destination IP Address', 'Destination IP', 'DestIP', 'dest_ip'],
-            'Total Packets': ['Total Packets', 'TotalPackets', 'total_packets', 'Packets'],
-            'Total Mbits': ['Total Mbits', 'TotalMbits', 'total_mbits', 'Mbits'],
+            'Total Packets': ['Total Packets', 'Total Packets Dropped', 'TotalPackets', 'total_packets', 'Packets'],
+            'Total Mbits': ['Total Mbits', 'Total Mbits Dropped', 'TotalMbits', 'total_mbits', 'Mbits'],
             'Max pps': ['Max pps', 'MaxPPS', 'max_pps', 'Max_pps'],
             'Max bps': ['Max bps', 'MaxBPS', 'max_bps', 'Max_bps'],
         }
@@ -484,6 +487,8 @@ class ForensicsDataProcessor:
             'max_mbits': 0,
             'max_pps': 0,
             'max_bps': 0,
+            'max_pps_details': None,
+            'max_bps_details': None,
             'total_packets': 0,
             'total_mbits': 0,
             'devices': {},
@@ -641,11 +646,25 @@ class ForensicsDataProcessor:
                 dest_ips = chunk['Destination IP Address'].to_list()
                 stats['unique_dest_ips'].update([ip for ip in dest_ips if ip and str(ip) != 'nan'])
             
-            # Attack types
-            if 'Attack Name' in chunk.columns:
+            # Attack types with threat categories
+            if 'Attack Name' in chunk.columns and 'Threat Category' in chunk.columns:
+                attack_names = chunk['Attack Name'].to_list()
+                threat_categories = chunk['Threat Category'].to_list()
+                for attack, threat_cat in zip(attack_names, threat_categories):
+                    if attack and str(attack) != 'nan' and threat_cat and str(threat_cat) != 'nan':
+                        # Store both threat category and attack name
+                        stats['attack_types'][attack] = {
+                            'count': stats['attack_types'].get(attack, {}).get('count', 0) + 1,
+                            'threat_category': str(threat_cat)
+                        }
+            elif 'Attack Name' in chunk.columns:
+                # Fallback to just attack names if threat category is not available
                 for attack in chunk['Attack Name'].to_list():
                     if attack and str(attack) != 'nan':
-                        stats['attack_types'][attack] = stats['attack_types'].get(attack, 0) + 1
+                        stats['attack_types'][attack] = {
+                            'count': stats['attack_types'].get(attack, {}).get('count', 0) + 1,
+                            'threat_category': 'N/A'
+                        }
             
             # Protocols
             if 'Protocol' in chunk.columns:
@@ -659,16 +678,19 @@ class ForensicsDataProcessor:
                     if action and str(action) != 'nan':
                         stats['actions'][action] = stats['actions'].get(action, 0) + 1
             
-            # Numeric statistics
+            # Numeric statistics - use mapped column names
+            # Get the actual column names from our mapping
+            column_mapping = self._create_column_mapping(chunk.columns)
+            
             numeric_columns = {
-                'Total Packets': 'total_packets',
-                'Total Mbits': 'total_mbits',
-                'Max pps': 'max_pps',
-                'Max bps': 'max_bps'
+                column_mapping.get('Total Packets'): 'total_packets',
+                column_mapping.get('Total Mbits'): 'total_mbits',
+                column_mapping.get('Max pps'): 'max_pps',
+                column_mapping.get('Max bps'): 'max_bps'
             }
             
             for col_name, stat_key in numeric_columns.items():
-                if col_name in chunk.columns:
+                if col_name and col_name in chunk.columns:
                     values = chunk[col_name].to_list()
                     numeric_values = [float(v) for v in values if v and str(v) != 'nan' and str(v).replace('.', '').isdigit()]
                     
@@ -679,6 +701,23 @@ class ForensicsDataProcessor:
                             current_max = max(numeric_values)
                             if current_max > stats[stat_key]:
                                 stats[stat_key] = current_max
+                                # Store the row details for max PPS and max BPS
+                                try:
+                                    # Find the index in the original values list (not numeric_values)
+                                    max_index = None
+                                    for i, val in enumerate(values):
+                                        if val and str(val) != 'nan' and float(val) == current_max:
+                                            max_index = i
+                                            break
+                                    
+                                    if max_index is not None:
+                                        if stat_key == 'max_pps':
+                                            stats['max_pps_details'] = self._extract_attack_details_from_row(chunk, max_index)
+                                        elif stat_key == 'max_bps':
+                                            stats['max_bps_details'] = self._extract_attack_details_from_row(chunk, max_index)
+                                except Exception as e:
+                                    logger.warning(f"Failed to update max stats details: {e}")
+                                    continue
             
             # Hourly distribution
             if 'Start Time' in chunk.columns:
@@ -728,7 +767,10 @@ class ForensicsDataProcessor:
             'total_mbits': 0,
             'max_pps': 0,
             'max_bps': 0,
+            'max_pps_details': None,
+            'max_bps_details': None,
             'duration_stats': [],
+            'longest_attack_details': None,  # Will store full details of the longest attack
             'top_source_ips': {},
             'top_dest_ips': {},
             'date_range': {
@@ -807,7 +849,22 @@ class ForensicsDataProcessor:
                         logger.error(f"Error reading chunk at row {current_skip}: {e}")
                         break
             
-            # Post-process statistics
+            # Post-process statistics - store detailed lists before converting to counts
+            holistic_stats['unique_source_ips_list'] = sorted(list(holistic_stats['unique_source_ips']))
+            holistic_stats['unique_dest_ips_list'] = sorted(list(holistic_stats['unique_dest_ips']))
+            
+            # Create attack types list with threat category details
+            attack_types_details = []
+            for attack_name, attack_info in sorted(holistic_stats['attack_types'].items()):
+                if isinstance(attack_info, dict):
+                    threat_category = attack_info.get('threat_category', 'N/A')
+                else:
+                    # Handle old format (just count)
+                    threat_category = 'N/A'
+                attack_types_details.append((threat_category, attack_name))
+            
+            holistic_stats['attack_types_list'] = sorted(list(holistic_stats['attack_types'].keys()))
+            holistic_stats['attack_types_details'] = attack_types_details
             holistic_stats['unique_source_ips'] = len(holistic_stats['unique_source_ips'])
             holistic_stats['unique_dest_ips'] = len(holistic_stats['unique_dest_ips'])
             
@@ -819,17 +876,18 @@ class ForensicsDataProcessor:
                 sorted(holistic_stats['top_dest_ips'].items(), key=lambda x: x[1], reverse=True)[:20]
             )
             
-            # Calculate longest attack duration
-            if holistic_stats['duration_stats']:
-                max_duration_seconds = max(holistic_stats['duration_stats'])
+            # Format longest attack duration
+            if holistic_stats['longest_attack_details']:
+                max_duration_seconds = holistic_stats['longest_attack_details']['duration']
                 # Convert seconds to HH:MM:SS format
                 hours = int(max_duration_seconds // 3600)
                 minutes = int((max_duration_seconds % 3600) // 60)
                 seconds = int(max_duration_seconds % 60)
-                holistic_stats['longest_attack_duration'] = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                holistic_stats['longest_attack_duration'] = f"{hours:02d}h:{minutes:02d}m:{seconds:02d}s"
             else:
-                holistic_stats['longest_attack_duration'] = "00:00:00"
-            
+                holistic_stats['longest_attack_duration'] = "00h:00m:00s"
+                holistic_stats['longest_attack_details'] = None
+
             logger.info(f"Holistic analysis complete: {processed_rows:,} total events processed")
             return holistic_stats
             
@@ -864,11 +922,31 @@ class ForensicsDataProcessor:
                     if risk and str(risk) != 'nan':
                         stats['risk_levels'][risk] = stats['risk_levels'].get(risk, 0) + 1
             
-            # Duration statistics
+            # Duration statistics - capture longest attack details
             if 'Duration' in chunk.columns:
-                durations = chunk['Duration'].to_list()
-                numeric_durations = [float(d) for d in durations if d and str(d) != 'nan' and str(d).replace('.', '').isdigit()]
-                stats['duration_stats'].extend(numeric_durations)
+                for i, duration_str in enumerate(chunk['Duration'].to_list()):
+                    if duration_str and str(duration_str) != 'nan' and str(duration_str).replace('.', '').isdigit():
+                        duration = float(duration_str)
+                        stats['duration_stats'].append(duration)
+                        
+                        # Check if this is the longest attack and capture full details
+                        current_longest = 0
+                        if stats['longest_attack_details']:
+                            current_longest = stats['longest_attack_details'].get('duration', 0)
+                        
+                        if duration > current_longest:
+                            # Capture full row details for the longest attack
+                            row_dict = {}
+                            for col in chunk.columns:
+                                try:
+                                    row_dict[col] = chunk[col].to_list()[i]
+                                except (IndexError, KeyError):
+                                    row_dict[col] = 'N/A'
+                            
+                            stats['longest_attack_details'] = {
+                                'duration': duration,
+                                'details': row_dict
+                            }
             
             # Count source/dest IPs for top lists
             if 'Source IP Address' in chunk.columns:
@@ -910,6 +988,30 @@ class ForensicsDataProcessor:
         
         return ""
     
+    def _extract_attack_details_from_row(self, chunk: pl.DataFrame, row_index: int) -> Dict[str, Any]:
+        """
+        Extract attack details from a specific row in the chunk.
+        
+        Args:
+            chunk: DataFrame chunk
+            row_index: Index of the row to extract details from
+            
+        Returns:
+            Dictionary containing attack details
+        """
+        try:
+            row_dict = {}
+            for col in chunk.columns:
+                try:
+                    row_dict[col] = chunk[col].to_list()[row_index]
+                except (IndexError, KeyError):
+                    row_dict[col] = 'N/A'
+            
+            return {'details': row_dict}
+        except Exception as e:
+            logger.warning(f"Failed to extract attack details from row {row_index}: {e}")
+            return {'details': {}}
+
     def get_processing_summary(self) -> Dict[str, Any]:
         """
         Get summary of data processing results.

@@ -26,13 +26,23 @@ CHART_COLORS = [
 CHUNK_SIZE = 50000  # Number of rows to process at once
 MAX_MEMORY_USAGE_GB = 2  # Maximum memory usage in GB before warning
 
+# Output format configuration
+# DEFAULT OUTPUT FORMATS - controls what formats are generated when no specific format is requested
+# This setting is used when:
+#   - Running `python analyzer.py` (default behavior)
+#   - Running `python analyzer.py --format both` (uses config setting)
+# Command-line overrides still work:
+#   - `python analyzer.py --format html` (HTML only, ignores config)
+#   - `python analyzer.py --format pdf` (PDF only, ignores config)
+OUTPUT_FORMATS = ['html']  # Available options: 'html', 'pdf'. Use ['html'] for HTML only, ['pdf'] for PDF only, or ['html', 'pdf'] for both
+
 # Data filtering options
 # Dynamic filters - exclude rows where column equals any of the specified values
 # Multiple filters use AND logic (row must match ALL conditions to be excluded)
 EXCLUDE_FILTERS = {
     # 'Threat Category': ['Anomalies'],  # Exclude anomaly detection records from analysis
     'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policies
-    # 'Attack Name': ['Health Check', 'Benign Traffic'],  # Example: exclude specific attacks
+    'Attack Name': ['DNS RFC-compliance violation'],  # Example: exclude specific attacks
     # 'Risk': ['Low'],  # Example: exclude low-risk events
     # 'Direction': ['Internal'],  # Example: exclude internal traffic
 }
@@ -263,7 +273,125 @@ REPORT_CSS = """
             grid-template-columns: 1fr;
         }
     }
+    
+    /* Expandable stat card styles */
+    .expandable-card {
+        position: relative;
+    }
+    
+    .expandable-trigger {
+        transition: background-color 0.2s ease;
+    }
+    
+    .expandable-trigger:hover {
+        background-color: rgba(0, 63, 127, 0.05);
+        border-radius: 4px;
+    }
+    
+    .expand-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        color: #6c757d;
+        transition: transform 0.3s ease;
+    }
+    
+    .expand-icon.rotated {
+        transform: translateY(-50%) rotate(180deg);
+    }
+    
+    .attack-details {
+        margin-top: 15px;
+        padding: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    }
+    
+    .attack-details.expanded {
+        max-height: 500px;
+        padding: 15px 0;
+        overflow-y: auto;
+    }
+    
+    .details-container {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 15px;
+        font-size: 13px;
+    }
+    
+    .detail-row {
+        margin-bottom: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid #f1f3f4;
+    }
+    
+    .detail-row:last-child {
+        margin-bottom: 0;
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+    
+    .detail-label {
+        font-weight: 600;
+        color: #495057;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+        display: block;
+    }
+    
+    .detail-value {
+        color: #003f7f;
+        font-size: 14px;
+        font-weight: 500;
+        display: block;
+        margin-left: 0;
+        background-color: #f8f9fa;
+        padding: 6px 10px;
+        border-radius: 4px;
+        border-left: 3px solid #003f7f;
+        word-break: break-word;
+    }
+    
+    /* Mobile responsiveness for expandable cards */
+    @media (max-width: 768px) {
+        .detail-value {
+            font-size: 13px;
+            padding: 5px 8px;
+        }
+        
+        .detail-label {
+            font-size: 11px;
+        }
+        
+        .expand-icon {
+            right: 5px;
+        }
+    }
 </style>
+
+<script>
+function toggleDetails(detailsId) {
+    const detailsElement = document.getElementById(detailsId);
+    const iconElement = document.getElementById(detailsId + '-icon');
+    
+    if (detailsElement.classList.contains('expanded')) {
+        // Collapse
+        detailsElement.classList.remove('expanded');
+        iconElement.classList.remove('rotated');
+    } else {
+        // Expand
+        detailsElement.classList.add('expanded');
+        iconElement.classList.add('rotated');
+    }
+}
+</script>
 """
 
 # Chart configuration
@@ -287,6 +415,22 @@ CHART_LAYOUT = {
     }
 }
 
+# Chart size optimization configuration
+# Options for include_plotlyjs:
+# - 'inline': Embed full Plotly library in each chart (largest files ~37MB, works offline)
+# - 'cdn': Use Plotly CDN (smaller files ~116KB, requires internet)  
+# - 'directory': Use local Plotly file (medium size, works offline if file available)
+# - False: Only chart div, no Plotly library (smallest, requires manual Plotly inclusion)
+CHART_PLOTLYJS_MODE = 'cdn'  # Options: 'inline', 'cdn', 'directory', False
+
+# Data precision for file size optimization
+CHART_DATA_PRECISION = {
+    'coordinates': 6,    # Decimal places for lat/lon coordinates  
+    'percentages': 2,    # Decimal places for percentages
+    'large_numbers': 0,  # Decimal places for counts > 1000
+    'small_numbers': 2,  # Decimal places for small values < 1000
+}
+
 # Log configuration
 LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -300,7 +444,7 @@ PERFORMANCE_THRESHOLDS = {
 }
 
 # Volume unit configuration
-VOLUME_UNIT = 'MB'  # Options: 'MB', 'GB', 'TB'
+VOLUME_UNIT = 'GB'  # Options: 'MB', 'GB', 'TB'
 VOLUME_UNIT_CONFIGS = {
     'MB': {
         'divider': 1,           # Mbits to MB: divide by 1 (already in Mbits, then divide by 8 for bytes)
@@ -322,8 +466,41 @@ VOLUME_UNIT_CONFIGS = {
     }
 }
 
+# Bandwidth unit configuration (tied to VOLUME_UNIT)
+# If VOLUME_UNIT is MB -> show Mbps, if GB -> show Gbps, if TB -> show Gbps
+BANDWIDTH_UNIT_CONFIGS = {
+    'MB': {
+        'divider': 1_000_000,       # bps to Mbps: divide by 1,000,000
+        'unit_name': 'Mbps',
+        'chart_title': 'Attack Max Mbps',
+        'stats_label': 'Attack Max Mbps',
+        'chart_name': 'Max Mbps',
+        'hover_template': '<b>%{x}</b><br>Max Mbps: %{y:,.2f}<extra></extra>'
+    },
+    'GB': {
+        'divider': 1_000_000_000,   # bps to Gbps: divide by 1,000,000,000
+        'unit_name': 'Gbps',
+        'chart_title': 'Attack Max Gbps',
+        'stats_label': 'Attack Max Gbps',
+        'chart_name': 'Max Gbps',
+        'hover_template': '<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
+    },
+    'TB': {
+        'divider': 1_000_000_000,   # bps to Gbps: divide by 1,000,000,000 (keep as Gbps for TB)
+        'unit_name': 'Gbps',
+        'chart_title': 'Attack Max Gbps',
+        'stats_label': 'Attack Max Gbps',
+        'chart_name': 'Max Gbps',
+        'hover_template': '<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
+    }
+}
+
+# Helper function to get current bandwidth unit config
+def get_bandwidth_unit_config():
+    return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])
+
 # Packet unit configuration
-PACKET_UNIT = ''  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
+PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
 PACKET_UNIT_CONFIGS = {
     'M': {
         'divider': 1_000_000,   # Convert to millions

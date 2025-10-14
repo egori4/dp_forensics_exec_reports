@@ -300,6 +300,12 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Features                                                                                   |
 |---------|--------------------------------------------------------------------------------------------|
+| v1.1.0  | - Added configurable output format (html, pdf, both) in config.py variable OUTPUT_FORMATS
+- Added support for columns header name variations for both 'Total Packets' and 'Total Packets Dropped', also 'Total Mbits' and 'Total Mbits Dropped'
+- Added logic- If VOLUME_UNIT is MB -> show Mbps, if GB -> show Gbps, if TB -> show Gbps
+- Added cdn mode - reduced HTML size from 37MB to 116Kb
+- Added Expandable details for Summary statistics
+   |
 | v1.0.1  | - Added filtering. Use new EXCLUDE_FILTERS var under config.py |
 | v1.0.0  | - Initial release<br>- Support for CSV and ZIP input files<br>- HTML and PDF report generation<br>- Interactive Plotly visualizations<br>- Memory-efficient processing<br>- Cross-platform compatibility<br>- Batch processing support |
 

@@ -205,7 +205,21 @@ class ReportGenerator:
             attack_types = holistic_data.get('attack_types', {})
             
             # Get top attack type
-            top_attack = max(attack_types.items(), key=lambda x: x[1]) if attack_types else ("N/A", 0)
+            if attack_types:
+                top_attack_tuple = None
+                max_count = 0
+                for attack, attack_info in attack_types.items():
+                    if isinstance(attack_info, dict):
+                        count = attack_info.get('count', 0)
+                    else:
+                        # Handle old format (just count)
+                        count = attack_info
+                    if count > max_count:
+                        max_count = count
+                        top_attack_tuple = (attack, count)
+                top_attack = top_attack_tuple if top_attack_tuple else ("N/A", 0)
+            else:
+                top_attack = ("N/A", 0)
             
             # Calculate daily average
             days = date_range.get('days', 1)
@@ -513,7 +527,16 @@ class ReportGenerator:
                 return '<p>No attack data available</p>'
             
             # Get top 10 attacks
-            top_attacks = sorted(attack_types.items(), key=lambda x: x[1], reverse=True)[:10]
+            attack_counts = {}
+            for attack, attack_info in attack_types.items():
+                if isinstance(attack_info, dict):
+                    count = attack_info.get('count', 0)
+                else:
+                    # Handle old format (just count)
+                    count = attack_info
+                attack_counts[attack] = count
+            
+            top_attacks = sorted(attack_counts.items(), key=lambda x: x[1], reverse=True)[:10]
             
             html = """
             <table>

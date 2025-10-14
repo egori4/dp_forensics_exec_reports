@@ -28,7 +28,7 @@ from utils import (
 )
 from data_processor import ForensicsDataProcessor
 from report_generator import ReportGenerator
-from config import REQUIRED_COLUMNS
+from config import REQUIRED_COLUMNS, OUTPUT_FORMATS
 
 logger = logging.getLogger(__name__)
 
@@ -169,18 +169,20 @@ class ForensicsAnalyzer:
     def process_single_file(
         self, 
         file_path: Path, 
-        formats: List[str] = ['html', 'pdf']
+        formats: List[str] = None
     ) -> Dict[str, Any]:
         """
         Process a single forensics file and generate reports.
         
         Args:
             file_path: Path to the file to process
-            formats: List of output formats to generate
+            formats: List of output formats to generate (defaults to OUTPUT_FORMATS from config)
             
         Returns:
             Dictionary with processing results
         """
+        if formats is None:
+            formats = OUTPUT_FORMATS.copy()
         start_time = time.time()
         logger.info(f"Starting processing of {file_path.name}")
         
@@ -255,16 +257,18 @@ class ForensicsAnalyzer:
             logger.error(f"Failed to process {file_path.name}: {e}")
             return results
     
-    def process_all_files(self, formats: List[str] = ['html', 'pdf']) -> Dict[str, Any]:
+    def process_all_files(self, formats: List[str] = None) -> Dict[str, Any]:
         """
         Process all discovered input files and generate reports.
         
         Args:
-            formats: List of output formats to generate
+            formats: List of output formats to generate (defaults to OUTPUT_FORMATS from config)
             
         Returns:
             Summary of all processing results
         """
+        if formats is None:
+            formats = OUTPUT_FORMATS.copy()
         overall_start_time = time.time()
         logger.info("Starting batch processing of all input files")
         
@@ -472,7 +476,7 @@ Examples:
         '--format',
         choices=['html', 'pdf', 'both'],
         default='both',
-        help='Output format(s) to generate (default: both)'
+        help='Output format(s) to generate (default: both - uses OUTPUT_FORMATS from config.py)'
     )
     
     parser.add_argument(
@@ -500,7 +504,7 @@ def main():
     
     # Determine output formats
     if args.format == 'both':
-        formats = ['html', 'pdf']
+        formats = OUTPUT_FORMATS.copy()  # Use config default
     else:
         formats = [args.format]
     

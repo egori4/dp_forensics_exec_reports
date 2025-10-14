@@ -66,11 +66,13 @@ def detect_file_encoding(file_path: Path) -> str:
             else:
                 encoding = 'utf-8'  # Final fallback
         
-        logger.debug(f"Detected encoding for {file_path.name}: {encoding}")
+        file_name = file_path.name if hasattr(file_path, 'name') else str(file_path)
+        logger.debug(f"Detected encoding for {file_name}: {encoding}")
         return encoding
         
     except Exception as e:
-        logger.warning(f"Failed to detect encoding for {file_path}: {e}")
+        file_name = file_path.name if hasattr(file_path, 'name') else str(file_path)
+        logger.warning(f"Failed to detect encoding for {file_name}: {e}")
         return 'utf-8'
 
 
