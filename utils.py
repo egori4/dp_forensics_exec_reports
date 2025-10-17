@@ -160,78 +160,164 @@ def detect_date_format(sample_dates: List[str]) -> Optional[str]:
         else:
             logger.warning(f"Forced format failed validation ({success_count}/{test_count} success), falling back to auto-detection")
     
-    # Filter out empty/invalid samples
-    all_valid_samples = [str(date_str).strip() for date_str in sample_dates if date_str and str(date_str).strip()]
+    # Clean and validate sample dates  
+    all_valid_samples = []
+    for date_str in sample_dates:
+        if date_str and isinstance(date_str, str):
+            cleaned = str(date_str).strip()
+            if len(cleaned) > 8:  # Minimum reasonable date length (MM/DD/YY)
+                all_valid_samples.append(cleaned)
+                
     if not all_valid_samples:
-        logger.warning("No valid date samples found")
+        logger.warning("No valid date samples found after cleaning")
         return None
-    
-    logger.info(f"Starting date format detection with {len(all_valid_samples)} total samples")
-    
-    # Use stratified sampling for better coverage across dataset
-    sample_size = min(200, len(all_valid_samples))  # Max 200 samples for speed
-    if sample_size == len(all_valid_samples):
-        valid_samples = all_valid_samples
+
+    total_samples = len(all_valid_samples)
+    logger.info(f"Starting intelligent date format detection with {total_samples} total samples")
+
+    # Smart sampling strategy based on dataset size
+    if total_samples <= 500:
+        # Small dataset: use all samples
+        working_samples = all_valid_samples
+        logger.debug(f"Small dataset: using all {len(working_samples)} samples")
     else:
-        # Stratified sampling: beginning, middle, and end of dataset
-        step = max(1, len(all_valid_samples) // sample_size)
-        valid_samples = all_valid_samples[::step][:sample_size]
+        # Large dataset: progressive random sampling
+        import random
+        # Start with diverse random sample, expand if needed
+        initial_size = min(300, total_samples // 3)
+        working_samples = random.sample(all_valid_samples, initial_size)
+        logger.debug(f"Large dataset: starting with {len(working_samples)} random samples")
+
+    # Progressive detection with up to 3 iterations
+    max_samples = min(1000, total_samples)  # Cap for performance
+
+    for iteration in range(3):
+        logger.debug(f"Detection iteration {iteration + 1} with {len(working_samples)} samples")
+
+        # Check for unambiguous evidence in current sample
+        unambiguous_evidence = _find_unambiguous_evidence(working_samples)
+
+        if unambiguous_evidence:
+            best_format = max(unambiguous_evidence.items(), key=lambda x: x[1])
+            logger.info(f"Unambiguous evidence found: {best_format[0]} ({best_format[1]} clear samples)")
+            return best_format[0]
+
+        # If no unambiguous evidence and we can expand the sample, do so
+        if total_samples > 500 and len(working_samples) < max_samples and iteration < 2:
+            additional_size = min(300, max_samples - len(working_samples))
+            remaining_samples = [s for s in all_valid_samples if s not in working_samples]
+
+            if remaining_samples and additional_size > 0:
+                import random
+                new_samples = random.sample(remaining_samples, min(additional_size, len(remaining_samples)))
+                working_samples.extend(new_samples)
+                logger.debug(f"Expanded sample to {len(working_samples)} for better evidence")
+                continue  # Try again with larger sample
+
+        # No more expansion possible or small dataset - proceed to parsing test
+        break
+
+    logger.debug(f"No unambiguous evidence found in {len(working_samples)} samples (all dates had day/month ≤ 12)")
+
+    # Use working samples for format detection (limit for parsing test performance)
+    valid_samples = working_samples[:200]
+    logger.debug(f"Using {len(valid_samples)} samples for parsing validation")
     
-    logger.debug(f"Using {len(valid_samples)} stratified samples for detection")
-    
-    # Phase 1: Quick unambiguous detection (much faster than full parsing)
+    return _detect_format_from_samples(valid_samples)
+
+
+def _find_unambiguous_evidence(samples):
+    """Find unambiguous evidence for date format in sample data."""
     unambiguous_evidence = {}
-    for date_str in valid_samples:
+    
+    for date_str in samples:
         try:
             date_part = date_str.split()[0]
             if '.' in date_part:
                 parts = [int(x) for x in date_part.split('.')]
                 if len(parts) >= 2:
                     first, second = parts[0], parts[1]
-                    if first > 12:  # Must be DD.MM format
+                    # Only count unambiguous cases where one part is definitely > 12
+                    if first > 12 and second <= 12:  # Must be DD.MM format
                         unambiguous_evidence['%d.%m.%Y %H:%M:%S'] = unambiguous_evidence.get('%d.%m.%Y %H:%M:%S', 0) + 1
-                    elif second > 12:  # Must be MM.DD format
+                    elif second > 12 and first <= 12:  # Must be MM.DD format
                         unambiguous_evidence['%m.%d.%Y %H:%M:%S'] = unambiguous_evidence.get('%m.%d.%Y %H:%M:%S', 0) + 1
         except (ValueError, IndexError):
             continue
+            
+    return unambiguous_evidence
+
+
+def _detect_format_from_samples(valid_samples):
+    """Detect format from samples using parsing success rate and chronological validation."""
+    from datetime import datetime, timedelta
     
-    # If we found unambiguous evidence, use it immediately
+    # Phase 1: Check for any remaining unambiguous evidence in our samples
+    unambiguous_evidence = _find_unambiguous_evidence(valid_samples)
+    
     if unambiguous_evidence:
         best_format = max(unambiguous_evidence.items(), key=lambda x: x[1])
-        logger.info(f"Unambiguous evidence found: {best_format[0]} ({best_format[1]} samples)")
+        logger.info(f"Unambiguous evidence found in parsing phase: {best_format[0]} ({best_format[1]} samples)")
         return best_format[0]
     
-    # Phase 2: Parse success rate test (if no unambiguous evidence)
-    logger.debug("No unambiguous evidence found, testing parse success rates")
-    best_format = None
-    best_score = 0
+    # If no unambiguous evidence, proceed with parsing test
+    logger.debug(f"No unambiguous evidence found in {len(valid_samples)} parsing samples")
     
-    # Test smaller sample for speed (first 50 stratified samples)
-    test_samples = valid_samples[:50]
+    # Phase 2: Enhanced parsing test with chronological validation
+    logger.debug("No unambiguous evidence found, testing formats with chronological validation")
     
+    # Test with larger sample for better reliability
+    test_samples = valid_samples[:100] if len(valid_samples) > 100 else valid_samples
+    
+    format_scores = {}
     for fmt in DATE_FORMATS:
         successes = 0
+        parsed_dates = []
+        
         for date_str in test_samples:
             try:
-                datetime.strptime(date_str, fmt)
+                parsed_date = datetime.strptime(date_str, fmt)
                 successes += 1
+                parsed_dates.append(parsed_date)
             except ValueError:
                 pass
                 
         success_rate = successes / len(test_samples)
-        logger.debug(f"Format {fmt}: {successes}/{len(test_samples)} ({success_rate:.1%})")
         
-        if success_rate > best_score:
-            best_score = success_rate
-            best_format = fmt
-            
-        # Early exit if we found 100% match
-        if success_rate == 1.0:
-            break
+        # Additional validation: check if dates are chronologically reasonable
+        chronology_score = 1.0  # Default to perfect score
+        if len(parsed_dates) >= 2:
+            # Check if dates are in reasonable chronological order (allow some variance)
+            sorted_dates = sorted(parsed_dates)
+            original_vs_sorted = sum(1 for i, d in enumerate(parsed_dates) if i < len(sorted_dates) and abs((d - sorted_dates[i]).days) <= 30) / len(parsed_dates)
+            chronology_score = original_vs_sorted
+        
+        # Check for future dates (likely indicates wrong format)
+        current_date = datetime.now()
+        future_dates = sum(1 for d in parsed_dates if d > current_date + timedelta(days=30))
+        future_penalty = future_dates / len(parsed_dates) if parsed_dates else 0
+        
+        # Combined score: success rate * chronology * (1 - future_penalty)
+        combined_score = success_rate * chronology_score * (1 - future_penalty * 0.5)
+        
+        format_scores[fmt] = {
+            'success_rate': success_rate,
+            'chronology_score': chronology_score,
+            'future_penalty': future_penalty,
+            'combined_score': combined_score,
+            'successes': successes
+        }
+        
+        logger.debug(f"Format {fmt}: {successes}/{len(test_samples)} ({success_rate:.1%}), chronology: {chronology_score:.1%}, future_penalty: {future_penalty:.1%}, combined: {combined_score:.1%}")
     
-    if best_format and best_score > 0.8:  # 80% success threshold
-        logger.info(f"Selected format: {best_format} (success rate: {best_score:.1%})")
-        return best_format
+    # Select best format based on combined score
+    if format_scores:
+        best_format = max(format_scores.items(), key=lambda x: x[1]['combined_score'])
+        best_fmt, best_stats = best_format
+        
+        if best_stats['combined_score'] > 0.7:  # 70% combined threshold
+            logger.info(f"Selected format: {best_fmt} (success rate: {best_stats['success_rate']:.1%}, combined score: {best_stats['combined_score']:.1%})")
+            return best_fmt
     
     # Fallback to config preference
     logger.warning("Could not reliably detect format, using config default")

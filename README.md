@@ -300,6 +300,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Features                                                                                   |
 |---------|--------------------------------------------------------------------------------------------|
+| v1.1.3  | - Bugfix automatically detecting the date format |
 | v1.1.2  | - Added configurable charts customizations |
 | v1.1.1  | - Fixed/enhanced accuracy in automatic date identification 
 - Added FORCE_DATE_FORMAT variable in config.py
