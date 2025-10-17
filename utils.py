@@ -76,12 +76,13 @@ def detect_file_encoding(file_path: Path) -> str:
         return 'utf-8'
 
 
-def parse_date_flexible(date_str: str) -> Optional[datetime]:
+def parse_date_flexible(date_str: str, detected_format: Optional[str] = None) -> Optional[datetime]:
     """
     Parse date string using multiple format attempts.
     
     Args:
         date_str: Date string to parse
+        detected_format: Specific format detected by format detection (tried first)
         
     Returns:
         Parsed datetime object or None if parsing fails
@@ -92,8 +93,19 @@ def parse_date_flexible(date_str: str) -> Optional[datetime]:
     # Clean the date string
     date_str = str(date_str).strip()
     
-    # Try predefined formats first (faster)
+    # Try detected format first if provided
+    if detected_format:
+        try:
+            return datetime.strptime(date_str, detected_format)
+        except ValueError:
+            pass
+    
+    # Try predefined formats
     for fmt in DATE_FORMATS:
+        # Skip detected format if we already tried it
+        if fmt == detected_format:
+            continue
+            
         try:
             return datetime.strptime(date_str, fmt)
         except ValueError:
@@ -111,7 +123,13 @@ def parse_date_flexible(date_str: str) -> Optional[datetime]:
 
 def detect_date_format(sample_dates: List[str]) -> Optional[str]:
     """
-    Detect the most likely date format from a sample of date strings.
+    Detect the most likely date format using efficient stratified sampling.
+    
+    Strategy:
+    1. Use stratified sampling across dataset for better coverage
+    2. Look for unambiguous evidence (day > 12) to resolve DD/MM vs MM/DD
+    3. If found, return immediately for speed
+    4. Fall back to parsing success rate on small sample
     
     Args:
         sample_dates: List of sample date strings
@@ -119,30 +137,108 @@ def detect_date_format(sample_dates: List[str]) -> Optional[str]:
     Returns:
         Most likely format string or None
     """
-    format_counts = {}
+    from datetime import datetime
+    from config import FORCE_DATE_FORMAT
     
-    for date_str in sample_dates[:100]:  # Test first 100 samples
-        if not date_str:
-            continue
-            
-        for fmt in DATE_FORMATS:
-            try:
-                datetime.strptime(str(date_str).strip(), fmt)
-                format_counts[fmt] = format_counts.get(fmt, 0) + 1
-                break  # Found a format that works
-            except ValueError:
-                continue
-    
-    if format_counts:
-        # Return the format that worked for most samples
-        best_format = max(format_counts, key=format_counts.get)
-        success_rate = format_counts[best_format] / len(sample_dates)
+    # Check for forced format override
+    if FORCE_DATE_FORMAT:
+        logger.info(f"Using forced date format from config: {FORCE_DATE_FORMAT}")
+        test_count = 0
+        success_count = 0
+        for date_str in sample_dates[:10]:
+            if date_str and str(date_str).strip():
+                test_count += 1
+                try:
+                    datetime.strptime(str(date_str).strip(), FORCE_DATE_FORMAT)
+                    success_count += 1
+                except ValueError:
+                    pass
         
-        logger.info(f"Detected date format: {best_format} (success rate: {success_rate:.1%})")
+        if test_count > 0 and success_count / test_count > 0.5:
+            logger.info(f"Forced format validation: {success_count}/{test_count} samples parsed successfully")
+            return FORCE_DATE_FORMAT
+        else:
+            logger.warning(f"Forced format failed validation ({success_count}/{test_count} success), falling back to auto-detection")
+    
+    # Filter out empty/invalid samples
+    all_valid_samples = [str(date_str).strip() for date_str in sample_dates if date_str and str(date_str).strip()]
+    if not all_valid_samples:
+        logger.warning("No valid date samples found")
+        return None
+    
+    logger.info(f"Starting date format detection with {len(all_valid_samples)} total samples")
+    
+    # Use stratified sampling for better coverage across dataset
+    sample_size = min(200, len(all_valid_samples))  # Max 200 samples for speed
+    if sample_size == len(all_valid_samples):
+        valid_samples = all_valid_samples
+    else:
+        # Stratified sampling: beginning, middle, and end of dataset
+        step = max(1, len(all_valid_samples) // sample_size)
+        valid_samples = all_valid_samples[::step][:sample_size]
+    
+    logger.debug(f"Using {len(valid_samples)} stratified samples for detection")
+    
+    # Phase 1: Quick unambiguous detection (much faster than full parsing)
+    unambiguous_evidence = {}
+    for date_str in valid_samples:
+        try:
+            date_part = date_str.split()[0]
+            if '.' in date_part:
+                parts = [int(x) for x in date_part.split('.')]
+                if len(parts) >= 2:
+                    first, second = parts[0], parts[1]
+                    if first > 12:  # Must be DD.MM format
+                        unambiguous_evidence['%d.%m.%Y %H:%M:%S'] = unambiguous_evidence.get('%d.%m.%Y %H:%M:%S', 0) + 1
+                    elif second > 12:  # Must be MM.DD format
+                        unambiguous_evidence['%m.%d.%Y %H:%M:%S'] = unambiguous_evidence.get('%m.%d.%Y %H:%M:%S', 0) + 1
+        except (ValueError, IndexError):
+            continue
+    
+    # If we found unambiguous evidence, use it immediately
+    if unambiguous_evidence:
+        best_format = max(unambiguous_evidence.items(), key=lambda x: x[1])
+        logger.info(f"Unambiguous evidence found: {best_format[0]} ({best_format[1]} samples)")
+        return best_format[0]
+    
+    # Phase 2: Parse success rate test (if no unambiguous evidence)
+    logger.debug("No unambiguous evidence found, testing parse success rates")
+    best_format = None
+    best_score = 0
+    
+    # Test smaller sample for speed (first 50 stratified samples)
+    test_samples = valid_samples[:50]
+    
+    for fmt in DATE_FORMATS:
+        successes = 0
+        for date_str in test_samples:
+            try:
+                datetime.strptime(date_str, fmt)
+                successes += 1
+            except ValueError:
+                pass
+                
+        success_rate = successes / len(test_samples)
+        logger.debug(f"Format {fmt}: {successes}/{len(test_samples)} ({success_rate:.1%})")
+        
+        if success_rate > best_score:
+            best_score = success_rate
+            best_format = fmt
+            
+        # Early exit if we found 100% match
+        if success_rate == 1.0:
+            break
+    
+    if best_format and best_score > 0.8:  # 80% success threshold
+        logger.info(f"Selected format: {best_format} (success rate: {best_score:.1%})")
         return best_format
     
-    logger.warning("Could not detect date format from samples")
-    return None
+    # Fallback to config preference
+    logger.warning("Could not reliably detect format, using config default")
+    return DATE_FORMATS[0] if DATE_FORMATS else None
+
+
+
 
 
 def get_complete_months(start_date: datetime, end_date: datetime) -> List[Tuple[datetime, datetime]]:

@@ -65,8 +65,8 @@ REQUIRED_COLUMNS = [
 
 # Date formats to try (in order of preference)
 DATE_FORMATS = [
+    '%d.%m.%Y %H:%M:%S',  # DD.MM.YYYY HH:MM:SS (preferred for European format)
     '%m.%d.%Y %H:%M:%S',  # MM.DD.YYYY HH:MM:SS (example format)
-    '%d.%m.%Y %H:%M:%S',  # DD.MM.YYYY HH:MM:SS
     '%Y-%m-%d %H:%M:%S',  # YYYY-MM-DD HH:MM:SS
     '%m/%d/%Y %H:%M:%S',  # MM/DD/YYYY HH:MM:SS
     '%d/%m/%Y %H:%M:%S',  # DD/MM/YYYY HH:MM:SS
@@ -74,6 +74,14 @@ DATE_FORMATS = [
     '%m-%d-%Y %H:%M:%S',  # MM-DD-YYYY HH:MM:SS
     '%d-%m-%Y %H:%M:%S',  # DD-MM-YYYY HH:MM:SS
 ]
+
+# Force a specific date format (overrides auto-detection)
+# Set to None for auto-detection, or specify exact format string
+# Use this when you know the exact format and auto-detection fails
+# Example: FORCE_DATE_FORMAT = '%d.%m.%Y %H:%M:%S'
+FORCE_DATE_FORMAT = None  # Set to specific format string to override auto-detection or None for auto-detection
+
+
 
 # Report styling
 REPORT_CSS = """

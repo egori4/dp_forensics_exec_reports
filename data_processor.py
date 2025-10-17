@@ -64,11 +64,10 @@ class ForensicsDataProcessor:
             # Get schema overrides for problematic columns
             schema_overrides = self._get_schema_overrides()
             
-            # Read a sample to analyze structure
+            # Read a larger sample to analyze structure and get enough samples for date format detection
             df_sample = pl.read_csv(
                 self.file_path,
                 n_rows=1000,
-                encoding=self.encoding,
                 ignore_errors=True,
                 schema_overrides=schema_overrides,
                 infer_schema_length=10000
@@ -212,7 +211,6 @@ class ForensicsDataProcessor:
             df_chunk = pl.read_csv(
                 self.file_path,
                 n_rows=self.chunk_size,
-                encoding=self.encoding,
                 schema_overrides=schema_overrides,
                 ignore_errors=True,
                 infer_schema_length=10000
@@ -273,10 +271,9 @@ class ForensicsDataProcessor:
                 
                 # Use scan and collect approach for batched processing
                 try:
-                    # Try the newer polars approach
+                    # Try the newer polars approach with auto-detected encoding
                     df_lazy = pl.scan_csv(
                         self.file_path,
-                        encoding=self.encoding,
                         schema_overrides=schema_overrides,
                         ignore_errors=True,
                         infer_schema_length=10000
@@ -296,6 +293,9 @@ class ForensicsDataProcessor:
                             offset += chunk_size
                             continue
                         
+                        # Store original chunk size before filtering (important for accurate offset tracking)
+                        original_chunk_size = len(chunk)
+                        
                         # Filter out excluded data
                         chunk = self._apply_data_filters(chunk)
                         
@@ -306,7 +306,7 @@ class ForensicsDataProcessor:
                         # Parse dates in this chunk
                         dates = []
                         for date_str in chunk['Start Time'].to_list():
-                            parsed_date = parse_date_flexible(date_str)
+                            parsed_date = parse_date_flexible(date_str, self.date_format)
                             if parsed_date:
                                 dates.append(parsed_date)
                         
@@ -326,7 +326,7 @@ class ForensicsDataProcessor:
                         offset += chunk_size
                         
                         # Break if we got less than expected (end of file)
-                        if len(chunk) < chunk_size:
+                        if original_chunk_size < chunk_size:
                             break
                             
                 except Exception as lazy_error:
@@ -339,7 +339,6 @@ class ForensicsDataProcessor:
                     header_df = pl.read_csv(
                         self.file_path,
                         n_rows=0,  # Just header
-                        encoding=self.encoding,
                         schema_overrides=schema_overrides,
                         ignore_errors=True,
                         infer_schema_length=10000
@@ -359,7 +358,6 @@ class ForensicsDataProcessor:
                                 self.file_path,
                                 skip_rows=current_skip,
                                 n_rows=chunk_size,
-                                encoding=self.encoding,
                                 schema_overrides=schema_overrides,
                                 ignore_errors=True,
                                 infer_schema_length=10000
@@ -381,7 +379,7 @@ class ForensicsDataProcessor:
                             # Parse dates in this chunk
                             dates = []
                             for date_str in chunk['Start Time'].to_list():
-                                parsed_date = parse_date_flexible(date_str)
+                                parsed_date = parse_date_flexible(date_str, self.date_format)
                                 if parsed_date:
                                     dates.append(parsed_date)
                             
@@ -507,7 +505,6 @@ class ForensicsDataProcessor:
             header_df = pl.read_csv(
                 self.file_path,
                 n_rows=0,  # Just header
-                encoding=self.encoding,
                 schema_overrides=schema_overrides,
                 ignore_errors=True,
                 infer_schema_length=10000
@@ -527,7 +524,6 @@ class ForensicsDataProcessor:
                         self.file_path,
                         skip_rows=current_skip,
                         n_rows=chunk_size,
-                        encoding=self.encoding,
                         schema_overrides=schema_overrides,
                         ignore_errors=True,
                         infer_schema_length=10000
@@ -722,7 +718,7 @@ class ForensicsDataProcessor:
             # Hourly distribution
             if 'Start Time' in chunk.columns:
                 for date_str in chunk['Start Time'].to_list():
-                    parsed_date = parse_date_flexible(date_str)
+                    parsed_date = parse_date_flexible(date_str, self.date_format)
                     if parsed_date:
                         hour = parsed_date.hour
                         stats['hourly_distribution'][hour] += 1
@@ -795,7 +791,6 @@ class ForensicsDataProcessor:
                 header_df = pl.read_csv(
                     self.file_path,
                     n_rows=0,  # Just header
-                    encoding=self.encoding,
                     schema_overrides=schema_overrides,
                     ignore_errors=True,
                     infer_schema_length=10000
@@ -815,7 +810,6 @@ class ForensicsDataProcessor:
                             self.file_path,
                             skip_rows=current_skip,
                             n_rows=chunk_size,
-                            encoding=self.encoding,
                             schema_overrides=schema_overrides,
                             ignore_errors=True,
                             infer_schema_length=10000
@@ -911,7 +905,7 @@ class ForensicsDataProcessor:
             # Daily distribution
             if 'Start Time' in chunk.columns:
                 for date_str in chunk['Start Time'].to_list():
-                    parsed_date = parse_date_flexible(date_str)
+                    parsed_date = parse_date_flexible(date_str, self.date_format)
                     if parsed_date:
                         day_key = parsed_date.strftime('%Y-%m-%d')
                         stats['daily_distribution'][day_key] = stats['daily_distribution'].get(day_key, 0) + 1

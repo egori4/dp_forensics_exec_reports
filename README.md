@@ -300,6 +300,10 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Features                                                                                   |
 |---------|--------------------------------------------------------------------------------------------|
+| v1.1.1  | - Fixed/enhanced accuracy in automatic date identification 
+- Added FORCE_DATE_FORMAT variable in config.py
+- Fixed csv processing using lazy method
+- Removed Data Quality Notes section |
 | v1.1.0  | - Added configurable output format (html, pdf, both) in config.py variable OUTPUT_FORMATS
 - Added support for columns header name variations for both 'Total Packets' and 'Total Packets Dropped', also 'Total Mbits' and 'Total Mbits Dropped'
 - Added logic- If VOLUME_UNIT is MB -> show Mbps, if GB -> show Gbps, if TB -> show Gbps

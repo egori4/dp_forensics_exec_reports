@@ -128,13 +128,10 @@ class ReportGenerator:
             # Create executive summary
             executive_summary = self._create_executive_summary(holistic_data, monthly_data)
             
-            # Create data quality notes
-            data_quality_notes = self._create_data_quality_notes(processing_summary, monthly_data)
-            
             # Generate the HTML content
             html_content = self._create_html_content(
                 base_name, holistic_data, monthly_data, charts,
-                executive_summary, data_quality_notes, processing_summary
+                executive_summary, processing_summary
             )
             
             # Write to file
@@ -271,82 +268,6 @@ class ReportGenerator:
             logger.error(f"Failed to create executive summary: {e}")
             return '<div class="warning">Failed to generate executive summary</div>'
     
-    def _create_data_quality_notes(self, processing_summary: Dict[str, Any], monthly_data: Dict[str, Any]) -> str:
-        """
-        Create data quality and methodology notes.
-        
-        Args:
-            processing_summary: Processing statistics
-            monthly_data: Monthly trend analysis results
-            
-        Returns:
-            HTML string with data quality notes
-        """
-        try:
-            file_info = processing_summary.get('file_info', {})
-            data_info = processing_summary.get('data_info', {})
-            processing_info = processing_summary.get('processing_info', {})
-            
-            notes = f"""
-            <div class="section">
-                <h2>Data Quality & Methodology</h2>
-                
-                <h3>Source Data:</h3>
-                <ul>
-                    <li>Source file: <strong>{file_info.get('name', 'Unknown')}</strong></li>
-                    <li>File size: <strong>{file_info.get('size', 'Unknown')}</strong></li>
-                    <li>Total records processed: <strong>{data_info.get('total_rows', 'Unknown')}</strong></li>
-                    <li>Date range: <strong>{data_info.get('date_range', {}).get('start', 'Unknown')} to {data_info.get('date_range', {}).get('end', 'Unknown')}</strong></li>
-                    <li>File encoding: <strong>{file_info.get('encoding', 'Unknown')}</strong></li>
-                </ul>
-                
-                <h3>Processing Information:</h3>
-                <ul>
-                    <li>Chunk size: <strong>{processing_info.get('chunk_size', 'Unknown')}</strong> rows per chunk</li>
-                    <li>Memory usage: <strong>{processing_info.get('memory_usage_mb', 'Unknown')} MB</strong></li>
-                    <li>Date format detected: <strong>{data_info.get('date_format', 'Auto-detected')}</strong></li>
-                </ul>
-            """
-            
-            # Add trend analysis notes
-            if monthly_data.get('has_trends', False):
-                complete_months = data_info.get('complete_months', 0)
-                excluded_note = monthly_data.get('excluded_note', '')
-                
-                notes += f"""
-                <h3>Trend Analysis:</h3>
-                <ul>
-                    <li>Complete months analyzed: <strong>{complete_months}</strong></li>
-                    {'<li>' + excluded_note + '</li>' if excluded_note else ''}
-                    <li>Month filtering ensures accurate month-to-month comparisons by excluding incomplete months at dataset boundaries.</li>
-                </ul>
-                """
-            else:
-                reason = monthly_data.get('reason', 'Insufficient data')
-                notes += f"""
-                <h3>Trend Analysis:</h3>
-                <div class="warning">
-                    <strong>Note:</strong> {reason}
-                </div>
-                """
-            
-            notes += """
-                <h3>Analysis Methodology:</h3>
-                <ul>
-                    <li><strong>Holistic Analysis:</strong> Uses entire dataset for comprehensive statistics and breakdowns</li>
-                    <li><strong>Monthly Trends:</strong> Analyzes only complete calendar months to ensure fair comparisons</li>
-                    <li><strong>Memory Management:</strong> Large files processed in chunks to handle datasets of any size</li>
-                    <li><strong>Data Validation:</strong> Intelligent date parsing and data type validation throughout processing</li>
-                </ul>
-            </div>
-            """
-            
-            return notes
-            
-        except Exception as e:
-            logger.error(f"Failed to create data quality notes: {e}")
-            return '<div class="warning">Failed to generate data quality notes</div>'
-    
     def _create_html_content(
         self,
         base_name: str,
@@ -354,7 +275,6 @@ class ReportGenerator:
         monthly_data: Dict[str, Any],
         charts: Dict[str, str],
         executive_summary: str,
-        data_quality_notes: str,
         processing_summary: Dict[str, Any]
     ) -> str:
         """
@@ -449,9 +369,6 @@ class ReportGenerator:
                 <h3>Top 10 Targeted Destinations</h3>
                 {self._create_top_destinations_table(holistic_data)}
             </div>
-            
-            <!-- Data Quality Notes -->
-            {data_quality_notes}
         </div>
         
         <div class="footer">
