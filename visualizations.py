@@ -33,7 +33,8 @@ from datetime import datetime, timedelta
 from config import (
     RADWARE_COLORS, CHART_COLORS, CHART_CONFIG, CHART_LAYOUT, 
     VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS,
-    get_bandwidth_unit_config, CHART_PLOTLYJS_MODE
+    get_bandwidth_unit_config, CHART_PLOTLYJS_MODE, CHART_PREFERENCES,
+    AVAILABLE_CHART_TYPES
 )
 from utils import format_number, calculate_percentage
 
@@ -50,6 +51,8 @@ class ForensicsVisualizer:
         self.colors = RADWARE_COLORS
         self.chart_colors = CHART_COLORS
         self.base_layout = CHART_LAYOUT.copy()
+        self.chart_preferences = CHART_PREFERENCES
+        self.available_types = AVAILABLE_CHART_TYPES
         
         logger.info("Initialized ForensicsVisualizer with Radware styling")
     
@@ -64,6 +67,75 @@ class ForensicsVisualizer:
             HTML string of the chart
         """
         return fig.to_html(config=CHART_CONFIG, include_plotlyjs=CHART_PLOTLYJS_MODE)
+    
+    def _create_trace_by_type(self, chart_type: str, chart_name: str, x_data, y_data, 
+                             color_key: str = 'primary', name: str = None, 
+                             hovertemplate: str = None, **kwargs):
+        """
+        Create a trace based on chart type configuration.
+        
+        Args:
+            chart_type: Type of chart ('line', 'bar', etc.)
+            chart_name: Name of chart config in CHART_PREFERENCES
+            x_data: X-axis data
+            y_data: Y-axis data
+            color_key: Key for color in chart preferences
+            name: Trace name
+            hovertemplate: Hover template
+            **kwargs: Additional trace parameters
+            
+        Returns:
+            Plotly trace object
+        """
+        # Get chart preferences
+        chart_config = self.chart_preferences.get(chart_name, {})
+        chart_colors = chart_config.get('colors', {})
+        
+        # Get color from preferences or fallback to default
+        color = chart_colors.get(color_key, self.colors.get(color_key, self.colors['primary']))
+        
+        if chart_type == 'line':
+            return go.Scatter(
+                x=x_data,
+                y=y_data,
+                mode='lines+markers',
+                line=dict(color=color, width=3),
+                marker=dict(size=8, color=color),
+                name=name,
+                hovertemplate=hovertemplate,
+                **kwargs
+            )
+        elif chart_type == 'bar':
+            return go.Bar(
+                x=x_data,
+                y=y_data,
+                marker=dict(color=color),
+                name=name,
+                hovertemplate=hovertemplate,
+                **kwargs
+            )
+        else:
+            # Default to bar chart
+            return go.Bar(
+                x=x_data,
+                y=y_data,
+                marker=dict(color=color),
+                name=name,
+                hovertemplate=hovertemplate,
+                **kwargs
+            )
+    
+    def _get_chart_type(self, chart_name: str) -> str:
+        """
+        Get configured chart type for a specific chart.
+        
+        Args:
+            chart_name: Name of chart in CHART_PREFERENCES
+            
+        Returns:
+            Chart type string
+        """
+        return self.chart_preferences.get(chart_name, {}).get('type', 'bar')
     
     def create_monthly_events_trend(self, monthly_data: Dict[str, Any]) -> str:
         """
@@ -87,15 +159,21 @@ class ForensicsVisualizer:
             
             fig = go.Figure()
             
-            fig.add_trace(go.Scatter(
-                x=month_labels,
-                y=events,
-                mode='lines+markers',
-                line=dict(color=self.colors['primary'], width=3),
-                marker=dict(size=8, color=self.colors['primary']),
+            # Get chart type from configuration
+            chart_type = self._get_chart_type('monthly_events_trend')
+            
+            # Create trace based on configuration
+            trace = self._create_trace_by_type(
+                chart_type=chart_type,
+                chart_name='monthly_events_trend',
+                x_data=month_labels,
+                y_data=events,
+                color_key='primary',
                 name='Total Events',
                 hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
-            ))
+            )
+            
+            fig.add_trace(trace)
             
             layout = self.base_layout.copy()
             layout.update({
@@ -250,49 +328,56 @@ class ForensicsVisualizer:
                 vertical_spacing=0.06
             )
             
+            # Get chart type from configuration
+            chart_type = self._get_chart_type('attack_volume_trends')
+            
             # Total Volume in configured unit (Row 1)
-            fig.add_trace(go.Scatter(
-                x=month_labels,
-                y=total_volume,
-                mode='lines+markers',
-                line=dict(color=self.colors['primary'], width=3),
-                marker=dict(size=8, color=self.colors['primary']),
+            volume_trace = self._create_trace_by_type(
+                chart_type=chart_type,
+                chart_name='attack_volume_trends',
+                x_data=month_labels,
+                y_data=total_volume,
+                color_key='volume',
                 name=f'Total {volume_config["display_name"]}',
                 hovertemplate=f'<b>%{{x}}</b><br>Total {volume_config["display_name"]}: %{{y:,.2f}}<extra></extra>'
-            ), row=1, col=1)
+            )
+            fig.add_trace(volume_trace, row=1, col=1)
             
             # Total Packets in configured unit (Row 2) 
-            fig.add_trace(go.Scatter(
-                x=month_labels,
-                y=converted_packets,
-                mode='lines+markers',
-                line=dict(color=self.colors['secondary'], width=3),
-                marker=dict(size=8, color=self.colors['secondary']),
+            packets_trace = self._create_trace_by_type(
+                chart_type=chart_type,
+                chart_name='attack_volume_trends',
+                x_data=month_labels,
+                y_data=converted_packets,
+                color_key='packets',
                 name=f'Total Packets {packet_config["display_name"]}',
                 hovertemplate=f'<b>%{{x}}</b><br>Packets {packet_config["display_name"]}: %{{y:,.2f}}<extra></extra>'
-            ), row=2, col=1)
+            )
+            fig.add_trace(packets_trace, row=2, col=1)
             
             # Max PPS (Row 3)
-            fig.add_trace(go.Scatter(
-                x=month_labels,
-                y=max_pps,
-                mode='lines+markers',
-                line=dict(color=self.colors['accent'], width=3),
-                marker=dict(size=8, color=self.colors['accent']),
+            pps_trace = self._create_trace_by_type(
+                chart_type=chart_type,
+                chart_name='attack_volume_trends',
+                x_data=month_labels,
+                y_data=max_pps,
+                color_key='pps',
                 name='Max PPS',
                 hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
-            ), row=3, col=1)
+            )
+            fig.add_trace(pps_trace, row=3, col=1)
             
             # Max bandwidth (Row 4)
-            fig.add_trace(go.Scatter(
-                x=month_labels,
-                y=max_bandwidth_values,
-                mode='lines+markers',
-                line=dict(color=self.colors['success'], width=3),
-                marker=dict(size=8, color=self.colors['success']),
+            bandwidth_trace = self._create_trace_by_type(
+                chart_type=chart_type,
+                chart_name='attack_volume_trends',
+                x_data=month_labels,
+                y_data=max_bandwidth_values,
+                color_key='bandwidth',
                 name=bandwidth_config['chart_name'],
                 hovertemplate=bandwidth_config['hover_template']
-            ), row=4, col=1)
+            )
+            fig.add_trace(bandwidth_trace, row=4, col=1)
             
             # Update layout to match monthly events styling
             layout = self.base_layout.copy()
@@ -344,18 +429,15 @@ class ForensicsVisualizer:
             
             hours = list(range(24))
             
+            # Get colorscale from configuration
+            chart_config = self.chart_preferences.get('hourly_heatmap', {})
+            colorscale = chart_config.get('colorscale', 'Blues')
+            
             fig = go.Figure(data=go.Heatmap(
                 z=heatmap_data,
                 x=hours,
                 y=month_labels,
-                colorscale=[
-                    [0, '#ffffff'],
-                    [0.2, '#e3f2fd'],
-                    [0.4, '#bbdefb'],
-                    [0.6, '#90caf9'],
-                    [0.8, '#42a5f5'],
-                    [1, '#1e88e5']
-                ],
+                colorscale=colorscale,  # Use configured colorscale
                 hovertemplate='<b>%{y}</b><br>Hour: %{x}:00<br>Events: %{z:,}<extra></extra>',
                 colorbar=dict(title='Number of Events')
             ))
@@ -1007,3 +1089,97 @@ class ForensicsVisualizer:
                 month_names.append(month_key)
         
         return month_names
+
+    def update_chart_preferences(self, chart_name: str, preferences: Dict[str, Any]) -> bool:
+        """
+        Update chart preferences for a specific chart.
+        
+        Args:
+            chart_name: Name of chart to update
+            preferences: Dictionary with new preferences
+            
+        Returns:
+            True if update successful, False otherwise
+        """
+        try:
+            if chart_name not in self.available_types:
+                logger.warning(f"Unknown chart name: {chart_name}")
+                return False
+            
+            # Validate chart type if provided
+            if 'type' in preferences:
+                chart_type = preferences['type']
+                if chart_type not in self.available_types[chart_name]:
+                    logger.warning(f"Invalid chart type '{chart_type}' for {chart_name}. Available: {self.available_types[chart_name]}")
+                    return False
+            
+            # Update preferences
+            if chart_name not in self.chart_preferences:
+                self.chart_preferences[chart_name] = {}
+            
+            self.chart_preferences[chart_name].update(preferences)
+            logger.info(f"Updated chart preferences for {chart_name}: {preferences}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update chart preferences for {chart_name}: {e}")
+            return False
+    
+    def get_chart_preferences(self, chart_name: str = None) -> Dict[str, Any]:
+        """
+        Get chart preferences for a specific chart or all charts.
+        
+        Args:
+            chart_name: Name of chart (None for all charts)
+            
+        Returns:
+            Dictionary with chart preferences
+        """
+        if chart_name:
+            return self.chart_preferences.get(chart_name, {})
+        return self.chart_preferences.copy()
+    
+    def get_available_chart_types(self, chart_name: str = None) -> Dict[str, List[str]]:
+        """
+        Get available chart types for a specific chart or all charts.
+        
+        Args:
+            chart_name: Name of chart (None for all charts)
+            
+        Returns:
+            Dictionary with available chart types
+        """
+        if chart_name:
+            return {chart_name: self.available_types.get(chart_name, [])}
+        return self.available_types.copy()
+    
+    def reset_chart_preferences(self, chart_name: str = None) -> bool:
+        """
+        Reset chart preferences to defaults.
+        
+        Args:
+            chart_name: Name of chart to reset (None for all charts)
+            
+        Returns:
+            True if reset successful, False otherwise
+        """
+        try:
+            if chart_name:
+                if chart_name in CHART_PREFERENCES:
+                    self.chart_preferences[chart_name] = CHART_PREFERENCES[chart_name].copy()
+                    logger.info(f"Reset chart preferences for {chart_name}")
+                else:
+                    logger.warning(f"No default preferences found for {chart_name}")
+                    return False
+            else:
+                # Reset all preferences
+                self.chart_preferences = {}
+                for name, prefs in CHART_PREFERENCES.items():
+                    self.chart_preferences[name] = prefs.copy()
+                logger.info("Reset all chart preferences to defaults")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to reset chart preferences: {e}")
+            return False

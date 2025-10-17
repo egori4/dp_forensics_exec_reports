@@ -455,6 +455,10 @@ Examples:
   python analyzer.py --input-dir forensics_input --output-dir reports
   python analyzer.py --format html --verbose
   python analyzer.py --format pdf --input-dir /path/to/files
+  
+Chart Customization:
+  Edit CHART_PREFERENCES in config.py to customize chart types and colors
+  See CHART_CONFIGURATION.md for detailed configuration guide
         """
     )
     

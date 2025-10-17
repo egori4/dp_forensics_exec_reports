@@ -507,6 +507,41 @@ BANDWIDTH_UNIT_CONFIGS = {
 def get_bandwidth_unit_config():
     return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])
 
+# Chart type and styling configuration
+CHART_PREFERENCES = {
+    'monthly_events_trend': {
+        'type': 'bar',  # Options: 'line', 'bar'
+        'colors': {
+            'primary': '#003f7f',      # Main color for data
+            'hover': '#002d5a',        # Hover color
+        }
+    },
+    'attack_volume_trends': {
+        'type': 'bar',  # Options: 'line', 'bar'
+        'colors': {
+            'volume': '#003f7f',       # Total Volume color
+            'packets': '#6cb2eb',      # Total Packets color
+            'pps': '#ff6b35',          # Max PPS color
+            'bandwidth': '#28a745',    # Max Bandwidth color
+        }
+    },
+
+    'hourly_heatmap': {
+        'colorscale': 'Blues',  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma', etc. - Attack Intensity by Hour heatmap
+        'colors': {
+            'text': '#ffffff',
+            'background': '#f8f9fa',
+        }
+    }
+}
+
+# Available chart types for each visualization
+AVAILABLE_CHART_TYPES = {
+    'monthly_events_trend': ['line', 'bar'],           # Security Events Per Month
+    'attack_volume_trends': ['line', 'bar'],           # Attack Volume Trends Over Time (4 subplots)
+    'hourly_heatmap': ['heatmap'],                     # Attack Intensity by Hour heatmap
+}
+
 # Packet unit configuration
 PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
 PACKET_UNIT_CONFIGS = {
