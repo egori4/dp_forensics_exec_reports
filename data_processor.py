@@ -413,8 +413,13 @@ class ForensicsDataProcessor:
             if min_date and max_date:
                 logger.info(f"Date range: {min_date.date()} to {max_date.date()}")
                 
-                # Calculate complete months
-                self.complete_months = get_complete_months(min_date, max_date)
+                # Calculate complete months with Phase 2 validation
+                self.complete_months = get_complete_months(
+                    min_date, 
+                    max_date, 
+                    file_path=str(self.file_path), 
+                    date_format=self.date_format
+                )
                 
                 return min_date, max_date
             else:

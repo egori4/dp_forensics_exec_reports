@@ -327,17 +327,24 @@ def _detect_format_from_samples(valid_samples):
 
 
 
-def get_complete_months(start_date: datetime, end_date: datetime) -> List[Tuple[datetime, datetime]]:
+def get_complete_months(start_date: datetime, end_date: datetime, 
+                       file_path: str = None, date_format: str = None) -> List[Tuple[datetime, datetime]]:
     """
-    Get list of complete calendar months within the date range.
+    Get list of complete calendar months within the date range, with optional validation.
+    
+    Phase 1: Identify calendar-complete months (full months like Jan 1-31, Feb 1-28, etc.)
+    Phase 2: validate months contain attacks that start and end within the same month
     
     Args:
         start_date: Start of data range
         end_date: End of data range
+        file_path: Optional path to CSV file for attack validation
+        date_format: Optional date format for parsing (required if file_path provided)
         
     Returns:
         List of (month_start, month_end) tuples for complete months
     """
+    # Phase 1: Calendar-based complete months identification
     complete_months = []
     
     # Find first complete month
@@ -369,8 +376,142 @@ def get_complete_months(start_date: datetime, end_date: datetime) -> List[Tuple[
         else:
             break
     
-    logger.info(f"Found {len(complete_months)} complete months between {start_date.date()} and {end_date.date()}")
-    return complete_months
+    logger.info(f"Phase 1: Found {len(complete_months)} calendar-complete months between {start_date.date()} and {end_date.date()}")
+    
+    # Phase 2: Validate months contain fully-contained attacks (if file path provided)
+    if file_path and date_format and complete_months:
+        validated_months = validate_complete_months(complete_months, file_path, date_format)
+        return validated_months
+    else:
+        logger.debug("Skipping Phase 2 validation (no file path or date format provided)")
+        return complete_months
+
+
+def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]], 
+                           file_path: str, 
+                           date_format: str) -> List[Tuple[datetime, datetime]]:
+    """
+    Validate that candidate months contain at least one attack started and ended in the same month.
+    
+    Once we find the first month with attack started and ended in the same month, all subsequent months
+    are assumed to be valid from phase 1 (no need to check them individually).
+    
+    Args:
+        candidate_months: List of (month_start, month_end) tuples from calendar analysis
+        file_path: Path to the CSV file containing attack data
+        date_format: Date format string for parsing attack timestamps
+        
+    Returns:
+        Filtered list of months that contain fully-contained attacks
+    """
+    import polars as pl
+    
+    if not candidate_months:
+        logger.info("No candidate months to validate")
+        return []
+    
+    logger.info(f"Phase 2: Further validating {len(candidate_months)} candidate complete months")
+    
+    try:
+        # Schema overrides for robust CSV reading
+        schema_overrides = {
+            'Physical Port': pl.Utf8,
+            'Source Port': pl.Utf8, 
+            'Destination Port': pl.Utf8,
+            'VLAN Tag': pl.Utf8,
+            'Risk': pl.Utf8,
+            'Packet Type': pl.Utf8,
+            'Protocol': pl.Utf8,
+            'Direction': pl.Utf8,
+            'Action': pl.Utf8,
+            'Device Type': pl.Utf8,
+            'Workflow Rule Process': pl.Utf8,
+            'Activation Id': pl.Utf8,
+            'Attack ID': pl.Utf8,
+            'Radware ID': pl.Utf8,
+        }
+        
+        # Start with all candidate months as potentially valid
+        validated_months = list(candidate_months)
+        excluded_months = []
+        first_valid_month_found = False
+        
+        for i, (month_start, month_end) in enumerate(candidate_months):
+            month_name = month_start.strftime('%Y-%m (%B)')
+            
+            # If we already found a valid month, all subsequent months are automatically valid(from phase 1)
+            if first_valid_month_found:
+                logger.debug(f"  ✅ {month_name}: Auto-validated (after first valid month)")
+                continue
+            
+            logger.debug(f"Validating month: {month_name}")
+            
+            # Read only start/end time columns with lazy loading
+            df_month = pl.scan_csv(
+                file_path,
+                schema_overrides=schema_overrides,
+                ignore_errors=True
+            ).select(['Start Time', 'End Time'])
+            
+            # Parse dates and filter for this specific month in one efficient operation
+            month_attacks = df_month.with_columns([
+                pl.col('Start Time').str.strptime(pl.Datetime, date_format, strict=False).alias('start_parsed'),
+                pl.col('End Time').str.strptime(pl.Datetime, date_format, strict=False).alias('end_parsed')
+            ]).filter(
+                # Only include records where parsing succeeded AND overlaps with this month
+                pl.col('start_parsed').is_not_null() & 
+                pl.col('end_parsed').is_not_null() &
+                (
+                    # Attack overlaps with month (starts before/during month AND ends during/after month)
+                    (pl.col('start_parsed') <= month_end) &
+                    (pl.col('end_parsed') >= month_start)
+                )
+            ).collect()
+            
+            if month_attacks.height == 0:
+                logger.debug(f"  ❌ {month_name}: No attacks found in month - EXCLUDED")
+                excluded_months.append((month_start, month_end))
+                continue
+            
+            # Check for fully-contained attacks (start AND end within month)
+            fully_contained = month_attacks.filter(
+                (pl.col('start_parsed') >= month_start) &
+                (pl.col('end_parsed') <= month_end)
+            )
+            
+            contained_count = fully_contained.height
+            total_count = month_attacks.height
+            
+            if contained_count > 0:
+                logger.debug(f"  ✅ {month_name}: {contained_count}/{total_count} fully-contained attacks - FIRST VALID MONTH")
+                first_valid_month_found = True
+                # From this point on, all subsequent months are automatically valid
+                remaining_months = len(candidate_months) - i - 1
+                if remaining_months > 0:
+                    logger.info(f"First fully-contained month found. Auto-validating {remaining_months} subsequent months.")
+                break
+            else:
+                logger.debug(f"  ❌ {month_name}: 0/{total_count} fully-contained attacks (all spillover) - EXCLUDED")
+                excluded_months.append((month_start, month_end))
+        
+        # Remove excluded months from validated list
+        for excluded_month in excluded_months:
+            if excluded_month in validated_months:
+                validated_months.remove(excluded_month)
+        
+        excluded_count = len(excluded_months)
+        logger.info(f"Month validation complete: {len(validated_months)} valid months, {excluded_count} excluded")
+        
+        if excluded_count > 0:
+            excluded_month_names = [month_start.strftime('%Y-%m') for month_start, month_end in excluded_months]
+            logger.info(f"Excluded months (no fully-contained attacks): {', '.join(excluded_month_names)}")
+        
+        return validated_months
+        
+    except Exception as e:
+        logger.error(f"Error during month validation: {e}")
+        logger.warning("Falling back to calendar-only validation")
+        return candidate_months
 
 
 def format_file_size(size_bytes: int) -> str:
