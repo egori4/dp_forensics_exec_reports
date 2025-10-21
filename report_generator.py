@@ -13,7 +13,7 @@ import tempfile
 import asyncio
 from jinja2 import Template
 
-from config import REPORT_CSS
+from config import REPORT_CSS, EXCLUDE_FILTERS
 from visualizations import ForensicsVisualizer
 from utils import format_number, format_file_size, clean_filename
 
@@ -239,6 +239,18 @@ class ReportGenerator:
                     
                     trend_analysis = f"<li>Security events show a <strong>{trend}</strong> trend over the analysis period.</li>"
             
+            # Excluded filters
+            excluded_filters = []
+            for values in EXCLUDE_FILTERS.values():
+                if isinstance(values, (list, tuple, set)):
+                    excluded_filters.extend(map(str, values))
+                else:
+                    excluded_filters.append(str(values))
+            excluded_filters_str = ', '.join(excluded_filters)
+
+            if not excluded_filters_str:
+                excluded_filters_str = 'None'
+            
             summary = f"""
             <div class="section">
                 <h2>Executive Summary</h2>
@@ -247,7 +259,7 @@ class ReportGenerator:
                 
                 <h3>Key Findings:</h3>
                 <ul>
-                    <li>Total security events: <strong>{format_number(total_events)}</strong></li>
+                    <li>Total security events: <strong>{format_number(total_events)}</strong> (Excluded events: <strong>{excluded_filters_str}</strong>)</li>
                     <li>Daily average: <strong>{format_number(int(daily_avg))}</strong> events per day</li>
                     <li>Unique source IP addresses: <strong>{format_number(unique_sources)}</strong></li>
                     <li>Most common attack type: <strong>{top_attack[0]}</strong> ({format_number(top_attack[1])} events)</li>

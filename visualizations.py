@@ -194,7 +194,8 @@ class ForensicsVisualizer:
                     'showgrid': True,
                     'gridcolor': '#f0f0f0'
                 },
-                'hovermode': 'x unified'
+                'hovermode': 'x unified',
+                'height': 500
             })
             
             fig.update_layout(layout)
@@ -283,7 +284,8 @@ class ForensicsVisualizer:
                 'xaxis': {'title': 'Month'},
                 'yaxis': {'title': 'Number of Events'},
                 'barmode': 'stack',
-                'hovermode': 'x unified'
+                'hovermode': 'x unified',
+                'height': 500
             })
             
             fig.update_layout(layout)

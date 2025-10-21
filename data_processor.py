@@ -878,11 +878,12 @@ class ForensicsDataProcessor:
             # Format longest attack duration
             if holistic_stats['longest_attack_details']:
                 max_duration_seconds = holistic_stats['longest_attack_details']['duration']
-                # Convert seconds to HH:MM:SS format
-                hours = int(max_duration_seconds // 3600)
+                # Convert seconds to days, hours, minutes, and seconds
+                days = int(max_duration_seconds // 86400)
+                hours = int((max_duration_seconds % 86400) // 3600)
                 minutes = int((max_duration_seconds % 3600) // 60)
                 seconds = int(max_duration_seconds % 60)
-                holistic_stats['longest_attack_duration'] = f"{hours:02d}h:{minutes:02d}m:{seconds:02d}s"
+                holistic_stats['longest_attack_duration'] = f"{days}d:{hours:02d}h:{minutes:02d}m:{seconds:02d}s"
             else:
                 holistic_stats['longest_attack_duration'] = "00h:00m:00s"
                 holistic_stats['longest_attack_details'] = None

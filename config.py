@@ -41,8 +41,8 @@ OUTPUT_FORMATS = ['html']  # Available options: 'html', 'pdf'. Use ['html'] for 
 # Multiple filters use AND logic (row must match ALL conditions to be excluded)
 EXCLUDE_FILTERS = {
     # 'Threat Category': ['Anomalies'],  # Exclude anomaly detection records from analysis
-    'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policies
-    'Attack Name': ['DNS RFC-compliance violation'],  # Example: exclude specific attacks
+    # 'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policies
+    # 'Attack Name': ['DNS RFC-compliance violation'],  # Example: exclude specific attacks
     # 'Risk': ['Low'],  # Example: exclude low-risk events
     # 'Direction': ['Internal'],  # Example: exclude internal traffic
 }
@@ -172,6 +172,22 @@ REPORT_CSS = """
         font-weight: bold;
         color: #003f7f;
         margin-bottom: 5px;
+        word-break: break-word;
+        line-height: 1.2;
+    }
+    
+    /* Dynamic font sizing classes for long stat values */
+    .stat-value.long-stat {
+        font-size: 1.6em;
+    }
+    
+    .stat-value.very-long-stat {
+        font-size: 1.3em;
+    }
+    
+    .stat-value.extremely-long-stat {
+        font-size: 1.1em;
+        line-height: 1.1;
     }
     
     .stat-label {
@@ -397,8 +413,62 @@ function toggleDetails(detailsId) {
         // Expand
         detailsElement.classList.add('expanded');
         iconElement.classList.add('rotated');
+        
+        // Apply dynamic font sizing after expansion
+        setTimeout(() => {
+            adjustStatValueFontSizes();
+        }, 100);
     }
 }
+
+function adjustStatValueFontSizes() {
+    // Adjust stat values (main stat numbers)
+    const statValues = document.querySelectorAll('.stat-value');
+    
+    statValues.forEach(element => {
+        // Reset classes
+        element.classList.remove('long-stat', 'very-long-stat', 'extremely-long-stat');
+        
+        const text = element.textContent || element.innerText;
+        // Remove icon text from measurement
+        const cleanText = text.replace('▼', '').trim();
+        const textLength = cleanText.length;
+        
+        // Apply classes based on text length for stat values
+        if (textLength > 18) {
+            element.classList.add('extremely-long-stat');
+        } else if (textLength > 16) {
+            element.classList.add('very-long-stat');
+        } else if (textLength > 6) {
+            element.classList.add('long-stat');
+        }
+        
+        // Additional overflow detection for stat values
+        setTimeout(() => {
+            let attempts = 0;
+            while (element.scrollWidth > element.clientWidth && attempts < 3) {
+                if (element.classList.contains('extremely-long-stat')) {
+                    // Already at smallest size
+                    break;
+                } else if (element.classList.contains('very-long-stat')) {
+                    element.classList.remove('very-long-stat');
+                    element.classList.add('extremely-long-stat');
+                } else if (element.classList.contains('long-stat')) {
+                    element.classList.remove('long-stat');
+                    element.classList.add('very-long-stat');
+                } else {
+                    element.classList.add('long-stat');
+                }
+                attempts++;
+            }
+        }, 50);
+    });
+}
+
+// Apply font sizing on page load
+document.addEventListener('DOMContentLoaded', function() {
+    adjustStatValueFontSizes();
+});
 </script>
 """
 
