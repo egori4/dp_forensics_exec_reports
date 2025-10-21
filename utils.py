@@ -333,12 +333,13 @@ def get_complete_months(start_date: datetime, end_date: datetime,
     Get list of complete calendar months within the date range, with optional validation.
     
     Phase 1: Identify calendar-complete months (full months like Jan 1-31, Feb 1-28, etc.)
-    Phase 2: validate months contain attacks that start and end within the same month
+    Phase 2: Validate months contain attacks that start and end within the same month,
+            with events distribution analysis for the first valid month
     
     Args:
         start_date: Start of data range
         end_date: End of data range
-        file_path: Optional path to CSV file for attack validation
+        file_path: Optional path to CSV file for data presence validation
         date_format: Optional date format for parsing (required if file_path provided)
         
     Returns:
@@ -365,8 +366,11 @@ def get_complete_months(start_date: datetime, end_date: datetime,
             month_end = datetime(current_month.year, current_month.month + 1, 1) - timedelta(seconds=1)
         
         # Check if this is a complete month within our data range
-        if month_end <= end_date:
+        month_fully_in_range = (current_month >= start_date and month_end <= end_date)
+        
+        if month_fully_in_range:
             complete_months.append((current_month, month_end))
+            logger.debug(f"Phase 1: Added complete month {current_month.strftime('%Y-%m (%B)')} - fully within data range")
             
             # Move to next month
             if current_month.month == 12:
@@ -374,11 +378,13 @@ def get_complete_months(start_date: datetime, end_date: datetime,
             else:
                 current_month = datetime(current_month.year, current_month.month + 1, 1)
         else:
+            # Month extends beyond data range - we're done
+            logger.debug(f"Phase 1: Month {current_month.strftime('%Y-%m (%B)')} extends beyond data range - stopping")
             break
     
     logger.info(f"Phase 1: Found {len(complete_months)} calendar-complete months between {start_date.date()} and {end_date.date()}")
     
-    # Phase 2: Validate months contain fully-contained attacks (if file path provided)
+    # Phase 2: Validate months contain fully-contained attacks with integrated distribution analysis
     if file_path and date_format and complete_months:
         validated_months = validate_complete_months(complete_months, file_path, date_format)
         return validated_months
@@ -387,14 +393,125 @@ def get_complete_months(start_date: datetime, end_date: datetime,
         return complete_months
 
 
+def _calculate_distribution_score(month_data, month_start, month_name):
+    """
+    Calculate a distribution score (0.0 to 1.0) based on how the data is spread across the month.
+    
+    Scoring factors:
+    1. Early month coverage: Does data start in first third of month?
+    2. Distribution spread: Is data spread across the month vs concentrated at end?
+    3. Gap pattern: Normal operational gaps vs suspicious late-start pattern?
+    
+    Args:
+        month_data: Polars DataFrame with 'start_parsed' column
+        month_start: datetime object for first day of month
+        month_name: String name of month for logging
+        
+    Returns:
+        Float score from 0.0 (suspicious) to 1.0 (good distribution)
+    """
+    import polars as pl
+    
+    # Get basic month info
+    if month_start.month == 12:
+        next_month = datetime(month_start.year + 1, 1, 1)
+    else:
+        next_month = datetime(month_start.year, month_start.month + 1, 1)
+    last_day_of_month = (next_month - timedelta(days=1)).day
+    
+    # Extract unique days with data using a simpler approach
+    unique_days_data = month_data.select(pl.col('start_parsed').dt.day().alias('day')).unique().sort('day')
+    day_list = []
+    
+    for row in unique_days_data.iter_rows():
+        day_list.append(row[0])
+    
+    if not day_list:
+        logger.debug(f"Phase 3: {month_name} - No data found")
+        return 0.0
+    
+    min_day = min(day_list)
+    max_day = max(day_list)
+    total_days_with_data = len(day_list)
+    
+    logger.debug(f"Phase 3: {month_name} - Days with data: {total_days_with_data}/{last_day_of_month}, range: {min_day}-{max_day}")
+    
+    # Fast-path optimization: If ALL days have events, it's clearly a complete month
+    if total_days_with_data == last_day_of_month:
+        logger.debug(f"Phase 3: {month_name} - ✅ Perfect coverage: ALL {total_days_with_data} days have data - FULL MONTH (1.0 score)")
+        return 1.0
+    
+    # Continue with detailed scoring for incomplete months
+    logger.debug(f"Phase 3: {month_name} - Incomplete coverage detected, proceeding with detailed scoring...")
+    
+    # Factor 1: Early month coverage (0.0 - 0.4 points)
+    # Does data start early in the month?
+    if min_day <= 3:  # Data starts in first 3 days
+        early_coverage_score = 0.4
+        logger.debug(f"Phase 3: {month_name} - ✅ Early coverage: starts day {min_day} (0.4 points)")
+    elif min_day <= 7:  # Data starts in first week
+        early_coverage_score = 0.2
+        logger.debug(f"Phase 3: {month_name} - ⚠️ Moderate early coverage: starts day {min_day} (0.2 points)")
+    elif min_day <= 14:  # Data starts in first half
+        early_coverage_score = 0.1
+        logger.debug(f"Phase 3: {month_name} - ⚠️ Late early coverage: starts day {min_day} (0.1 points)")
+    else:  # Data starts in second half - suspicious
+        early_coverage_score = 0.0
+        logger.debug(f"Phase 3: {month_name} - ❌ No early coverage: starts day {min_day} (0.0 points)")
+    
+    # Factor 2: Distribution spread (0.0 - 0.4 points)
+    # Is data spread across the month or concentrated at end?
+    month_third_1 = last_day_of_month // 3
+    month_third_2 = (last_day_of_month * 2) // 3
+    
+    days_in_first_third = len([d for d in day_list if d <= month_third_1])
+    days_in_middle_third = len([d for d in day_list if month_third_1 < d <= month_third_2])
+    days_in_last_third = len([d for d in day_list if d > month_third_2])
+    
+    # Good distribution: data in at least 2 thirds of month
+    thirds_with_data = sum([days_in_first_third > 0, days_in_middle_third > 0, days_in_last_third > 0])
+    
+    if thirds_with_data >= 3:  # Data in all thirds
+        spread_score = 0.4
+        logger.debug(f"Phase 3: {month_name} - ✅ Excellent spread: all thirds have data (0.4 points)")
+    elif thirds_with_data >= 2:  # Data in 2 thirds
+        spread_score = 0.2
+        logger.debug(f"Phase 3: {month_name} - ✅ Good spread: {thirds_with_data} thirds have data (0.2 points)")
+    else:  # Data concentrated in 1 third - suspicious
+        spread_score = 0.0
+        logger.debug(f"Phase 3: {month_name} - ❌ Poor spread: only {thirds_with_data} third has data (0.0 points)")
+    
+    # Factor 3: Coverage density (0.0 - 0.2 points)
+    # What percentage of days have data?
+    coverage_ratio = total_days_with_data / last_day_of_month
+    
+    if coverage_ratio >= 0.5:  # 50%+ days have data
+        density_score = 0.2
+        logger.debug(f"Phase 3: {month_name} - ✅ Good density: {coverage_ratio:.1%} days have data (0.2 points)")
+    elif coverage_ratio >= 0.3:  # 30%+ days have data
+        density_score = 0.1
+        logger.debug(f"Phase 3: {month_name} - ⚠️ Moderate density: {coverage_ratio:.1%} days have data (0.1 points)")
+    else:  # <30% days have data
+        density_score = 0.0
+        logger.debug(f"Phase 3: {month_name} - ❌ Low density: {coverage_ratio:.1%} days have data (0.0 points)")
+    
+    # Calculate final score
+    total_score = early_coverage_score + spread_score + density_score
+    
+    logger.debug(f"Phase 3: {month_name} - Final score: {total_score:.2f} (early: {early_coverage_score:.1f}, spread: {spread_score:.1f}, density: {density_score:.1f})")
+    
+    return total_score
+
+
 def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]], 
                            file_path: str, 
                            date_format: str) -> List[Tuple[datetime, datetime]]:
     """
     Validate that candidate months contain at least one attack started and ended in the same month.
+    Enhanced with integrated distribution analysis for the first valid month.
     
-    Once we find the first month with attack started and ended in the same month, all subsequent months
-    are assumed to be valid from phase 1 (no need to check them individually).
+    Once we find the first month with fully-contained attacks, we also validate its data distribution
+    pattern before accepting it. All subsequent months are auto-validated.
     
     Args:
         candidate_months: List of (month_start, month_end) tuples from calendar analysis
@@ -402,7 +519,7 @@ def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]],
         date_format: Date format string for parsing attack timestamps
         
     Returns:
-        Filtered list of months that contain fully-contained attacks
+        Filtered list of months that contain fully-contained attacks with good distribution
     """
     import polars as pl
     
@@ -410,7 +527,7 @@ def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]],
         logger.info("No candidate months to validate")
         return []
     
-    logger.info(f"Phase 2: Further validating {len(candidate_months)} candidate complete months")
+    logger.info(f"Phase 2: Validating {len(candidate_months)} candidate complete months")
     
     try:
         # Schema overrides for robust CSV reading
@@ -439,7 +556,7 @@ def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]],
         for i, (month_start, month_end) in enumerate(candidate_months):
             month_name = month_start.strftime('%Y-%m (%B)')
             
-            # If we already found a valid month, all subsequent months are automatically valid(from phase 1)
+            # If we already found a valid month, all subsequent months are automatically valid
             if first_valid_month_found:
                 logger.debug(f"  ✅ {month_name}: Auto-validated (after first valid month)")
                 continue
@@ -483,13 +600,25 @@ def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]],
             total_count = month_attacks.height
             
             if contained_count > 0:
-                logger.debug(f"  ✅ {month_name}: {contained_count}/{total_count} fully-contained attacks - FIRST VALID MONTH")
-                first_valid_month_found = True
-                # From this point on, all subsequent months are automatically valid
-                remaining_months = len(candidate_months) - i - 1
-                if remaining_months > 0:
-                    logger.info(f"First fully-contained month found. Auto-validating {remaining_months} subsequent months.")
-                break
+                logger.debug(f"  ✅ {month_name}: {contained_count}/{total_count} fully-contained attacks - FIRST VALID MONTH CANDIDATE")
+                
+                # Integrated Phase 3: Validate distribution pattern using the filtered data we already have
+                logger.debug(f"Phase 2+3: Analyzing distribution pattern for {month_name} using {contained_count:,} fully-contained events")
+                distribution_score = _calculate_distribution_score(fully_contained.select(['start_parsed']), month_start, month_name)
+                
+                # Threshold for acceptance (0.7 = 70% confidence)
+                if distribution_score >= 0.7:
+                    logger.debug(f"Phase 2+3: ✅ {month_name} has acceptable data distribution (score: {distribution_score:.2f}) - FIRST VALID MONTH")
+                    first_valid_month_found = True
+                    
+                    # From this point on, all subsequent months are automatically valid
+                    remaining_months = len(candidate_months) - i - 1
+                    if remaining_months > 0:
+                        logger.info(f"First valid month with good distribution found. Auto-validating {remaining_months} subsequent months.")
+                    break
+                else:
+                    logger.debug(f"Phase 2+3: ❌ {month_name} has suspicious data distribution (score: {distribution_score:.2f}) - EXCLUDED")
+                    excluded_months.append((month_start, month_end))
             else:
                 logger.debug(f"  ❌ {month_name}: 0/{total_count} fully-contained attacks (all spillover) - EXCLUDED")
                 excluded_months.append((month_start, month_end))
@@ -504,7 +633,7 @@ def validate_complete_months(candidate_months: List[Tuple[datetime, datetime]],
         
         if excluded_count > 0:
             excluded_month_names = [month_start.strftime('%Y-%m') for month_start, month_end in excluded_months]
-            logger.info(f"Excluded months (no fully-contained attacks): {', '.join(excluded_month_names)}")
+            logger.info(f"Excluded months (no fully-contained attacks or poor distribution): {', '.join(excluded_month_names)}")
         
         return validated_months
         
