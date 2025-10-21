@@ -300,6 +300,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Change/Fixes/Features                                                                      |
 |---------|--------------------------------------------------------------------------------------------|
+| v1.1.6  | - 10/21/25 Removed zoom from bar charts, removed vertical zoom from Daily Attack events |
 | v1.1.5  | - 10/21/25 Bugfix- inconsistent statistics for Max Gbps and Max PPS in Summary statistics and Volume trends |
 | v1.1.4  | - 10/20/25 Enhancment to better identify complete months |
 | v1.1.3  | - Bugfix automatically detecting the date format |

@@ -56,17 +56,19 @@ class ForensicsVisualizer:
         
         logger.info("Initialized ForensicsVisualizer with Radware styling")
     
-    def _convert_to_html(self, fig):
+    def _convert_to_html(self, fig, custom_config=None):
         """
         Convert Plotly figure to HTML with optimized Plotly inclusion.
         
         Args:
             fig: Plotly figure object
+            custom_config: Optional custom configuration to override CHART_CONFIG
             
         Returns:
             HTML string of the chart
         """
-        return fig.to_html(config=CHART_CONFIG, include_plotlyjs=CHART_PLOTLYJS_MODE)
+        config = custom_config if custom_config is not None else CHART_CONFIG
+        return fig.to_html(config=config, include_plotlyjs=CHART_PLOTLYJS_MODE)
     
     def _create_trace_by_type(self, chart_type: str, chart_name: str, x_data, y_data, 
                              color_key: str = 'primary', name: str = None, 
@@ -197,7 +199,19 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return self._convert_to_html(fig)
+            # Disable zoom on axes for bar charts
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
+            
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
             
         except Exception as e:
             logger.error(f"Failed to create monthly events trend: {e}")
@@ -274,7 +288,19 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return self._convert_to_html(fig)
+            # Disable zoom on axes for bar charts
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
+            
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
             
         except Exception as e:
             logger.error(f"Failed to create attack types stacked bar: {e}")
@@ -395,10 +421,18 @@ class ForensicsVisualizer:
             fig.update_layout(layout)
             
             # Update axes to match monthly events styling
-            fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0')
-            fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0')
+            fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0', fixedrange=True)
+            fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0', fixedrange=True)
             
-            return self._convert_to_html(fig)
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
             
         except Exception as e:
             logger.error(f"Failed to create attack volume trends: {e}")
@@ -588,7 +622,19 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return self._convert_to_html(fig)
+            # Disable zoom on axes for bar charts
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
+            
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
             
         except Exception as e:
             logger.error(f"Failed to create top source IPs bar chart: {e}")
@@ -637,7 +683,19 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return self._convert_to_html(fig)
+            # Disable zoom on axes for bar charts
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
+            
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
             
         except Exception as e:
             logger.error(f"Failed to create protocol distribution chart: {e}")
@@ -697,7 +755,18 @@ class ForensicsVisualizer:
             
             fig.update_layout(layout)
             
-            return self._convert_to_html(fig)
+            # Disable vertical zoom but keep horizontal zoom for timeline
+            fig.update_yaxes(fixedrange=True)  # Disable vertical zoom
+            
+            # Timeline config - disable vertical zoom but keep horizontal zoom
+            timeline_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': 'x',  # Only horizontal zoom
+                'doubleClick': 'reset+autosize'
+            }
+            
+            return self._convert_to_html(fig, timeline_config)
             
         except Exception as e:
             logger.error(f"Failed to create daily timeline chart: {e}")
