@@ -598,7 +598,7 @@ class ForensicsDataProcessor:
             # Parse dates and convert to polars datetime
             chunk = chunk.with_columns([
                 pl.col('Start Time').map_elements(
-                    lambda x: parse_date_flexible(x),
+                    lambda x: parse_date_flexible(x, self.date_format),
                     return_dtype=pl.Object
                 ).alias('parsed_date_obj')
             ])

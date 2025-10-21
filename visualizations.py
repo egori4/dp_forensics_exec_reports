@@ -285,7 +285,7 @@ class ForensicsVisualizer:
         Create line charts for attack volume metrics over time.
         
         Args:
-            monthly_data: Dictionary with monthly statistics
+            monthly_data: Dictionary containing monthly statistics
             
         Returns:
             HTML string of the chart
