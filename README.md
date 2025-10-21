@@ -300,6 +300,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Change/Fixes/Features                                                                      |
 |---------|--------------------------------------------------------------------------------------------|
+| v1.1.8  | - 10/21/25 - Enhanced Attack Type Distribution pie chart visualization, style and to avoid overlap between categories and title |
 | v1.1.7  | - 10/21/25 - Updated height of the bar charts to not overlap legend with axis x text
 - Added autofont adjustment if length of the text is too long (longest attack duration for example)
 - Added days to longest attack duration

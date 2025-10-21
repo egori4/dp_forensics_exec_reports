@@ -544,9 +544,18 @@ class ForensicsVisualizer:
             fig = go.Figure(data=[go.Pie(
                 labels=labels,
                 values=values,
-                hole=0.3,
+                hole=0.4,  # Larger hole to make pie smaller
                 marker=dict(colors=colors),
-                hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>'
+                textposition='outside',
+                texttemplate='%{label}<br>%{percent}',
+                textfont=dict(size=11),  # Slightly smaller text
+                hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
+                # Improved text positioning for better visibility
+                textinfo='label+percent',
+                # Prevent text overlap by using pull for small slices
+                pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
+                # Make the pie chart smaller by adjusting domain
+                domain={'x': [0.1, 0.7], 'y': [0.1, 0.9]}  # Smaller pie chart area
             )])
             
             layout = self.base_layout.copy()
@@ -554,7 +563,8 @@ class ForensicsVisualizer:
                 'title': {
                     'text': 'Attack Type Distribution',
                     'font': {'size': 18, 'color': self.colors['dark']},
-                    'x': 0.5
+                    'x': 0.5,
+                    'y': 0.95  # Keep title high
                 },
                 'showlegend': True,
                 'legend': {
@@ -562,8 +572,10 @@ class ForensicsVisualizer:
                     'yanchor': 'middle',
                     'y': 0.5,
                     'xanchor': 'left',
-                    'x': 1.05
-                }
+                    'x': 0.75  # Move legend closer since pie is smaller
+                },
+                'height': 600,
+                'margin': {'t': 80, 'b': 40, 'l': 40, 'r': 100}  # Adjusted margins
             })
             
             fig.update_layout(layout)
