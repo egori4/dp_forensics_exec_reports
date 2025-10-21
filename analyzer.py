@@ -184,6 +184,7 @@ class ForensicsAnalyzer:
         if formats is None:
             formats = OUTPUT_FORMATS.copy()
         start_time = time.time()
+        logger.info("-" * 60)
         logger.info(f"Starting processing of {file_path.name}")
         
         results = {

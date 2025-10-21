@@ -439,7 +439,7 @@ function adjustStatValueFontSizes() {
             element.classList.add('extremely-long-stat');
         } else if (textLength > 16) {
             element.classList.add('very-long-stat');
-        } else if (textLength > 6) {
+        } else if (textLength > 10) {
             element.classList.add('long-stat');
         }
         

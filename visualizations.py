@@ -547,15 +547,15 @@ class ForensicsVisualizer:
                 hole=0.4,  # Larger hole to make pie smaller
                 marker=dict(colors=colors),
                 textposition='outside',
-                texttemplate='%{label}<br>%{percent}',
-                textfont=dict(size=11),  # Slightly smaller text
+                texttemplate='%{label}, %{percent}',  # Single line with comma separation
+                textfont=dict(size=11),  # Smaller text to fit better
                 hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
                 # Improved text positioning for better visibility
                 textinfo='label+percent',
                 # Prevent text overlap by using pull for small slices
                 pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
-                # Make the pie chart smaller by adjusting domain
-                domain={'x': [0.1, 0.7], 'y': [0.1, 0.9]}  # Smaller pie chart area
+                # Move the pie chart further left to avoid title overlap
+                domain={'x': [0.0, 0.55], 'y': [0.1, 0.9]}  # Move pie chart further left
             )])
             
             layout = self.base_layout.copy()
@@ -572,10 +572,10 @@ class ForensicsVisualizer:
                     'yanchor': 'middle',
                     'y': 0.5,
                     'xanchor': 'left',
-                    'x': 0.75  # Move legend closer since pie is smaller
+                    'x': 10  # Adjust legend position for moved pie chart
                 },
                 'height': 600,
-                'margin': {'t': 80, 'b': 40, 'l': 40, 'r': 100}  # Adjusted margins
+                'margin': {'t': 80, 'b': 40, 'l': 10, 'r': 120}  # Adjusted margins - less left margin, more right for legend
             })
             
             fig.update_layout(layout)
