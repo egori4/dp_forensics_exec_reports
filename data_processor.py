@@ -185,7 +185,7 @@ class ForensicsDataProcessor:
             'Total Packets': ['Total Packets', 'Total Packets Dropped', 'TotalPackets', 'total_packets', 'Packets'],
             'Total Mbits': ['Total Mbits', 'Total Mbits Dropped', 'TotalMbits', 'total_mbits', 'Mbits'],
             'Max pps': ['Max pps', 'MaxPPS', 'max_pps', 'Max_pps'],
-            'Max bps': ['Max bps', 'MaxBPS', 'max_bps', 'Max_bps'],
+            'Max bps': ['Max bps', 'MaxBPS', 'max_bps', 'Max_bps', 'Max Attack Rate in Kb'],
         }
         
         for standard_name, variants in column_variants.items():
@@ -774,6 +774,8 @@ class ForensicsDataProcessor:
             'longest_attack_details': None,  # Will store full details of the longest attack
             'top_source_ips': {},
             'top_dest_ips': {},
+            'attack_max_bps': {},  # Track max BPS per attack type
+            'attack_max_pps': {},  # Track max PPS per attack type
             'date_range': {
                 'start': self.data_start_date,
                 'end': self.data_end_date,
@@ -958,6 +960,39 @@ class ForensicsDataProcessor:
                 for ip in chunk['Destination IP Address'].to_list():
                     if ip and str(ip) != 'nan':
                         stats['top_dest_ips'][ip] = stats['top_dest_ips'].get(ip, 0) + 1
+            
+            # Track max BPS and PPS per attack type
+            if 'Attack Name' in chunk.columns:
+                attack_names = chunk['Attack Name'].to_list()
+                
+                # Process Max BPS per attack
+                column_mapping = self._create_column_mapping(chunk.columns)
+                max_bps_col = column_mapping.get('Max bps')
+                if max_bps_col and max_bps_col in chunk.columns:
+                    max_bps_values = chunk[max_bps_col].to_list()
+                    for attack, bps_val in zip(attack_names, max_bps_values):
+                        if attack and str(attack) != 'nan' and bps_val and str(bps_val) != 'nan':
+                            try:
+                                bps_float = float(bps_val)
+                                current_max = stats['attack_max_bps'].get(attack, 0)
+                                if bps_float > current_max:
+                                    stats['attack_max_bps'][attack] = bps_float
+                            except (ValueError, TypeError):
+                                continue
+                
+                # Process Max PPS per attack
+                max_pps_col = column_mapping.get('Max pps')
+                if max_pps_col and max_pps_col in chunk.columns:
+                    max_pps_values = chunk[max_pps_col].to_list()
+                    for attack, pps_val in zip(attack_names, max_pps_values):
+                        if attack and str(attack) != 'nan' and pps_val and str(pps_val) != 'nan':
+                            try:
+                                pps_float = float(pps_val)
+                                current_max = stats['attack_max_pps'].get(attack, 0)
+                                if pps_float > current_max:
+                                    stats['attack_max_pps'][attack] = pps_float
+                            except (ValueError, TypeError):
+                                continue
         
         except Exception as e:
             logger.warning(f"Failed to update holistic stats: {e}")

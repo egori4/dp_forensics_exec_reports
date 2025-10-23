@@ -170,6 +170,11 @@ class ReportGenerator:
             charts['protocol_distribution'] = self.visualizer.create_protocol_distribution_chart(holistic_data)
             charts['daily_timeline'] = self.visualizer.create_daily_timeline_chart(holistic_data)
             
+            # New attack analysis charts
+            charts['top_attacks_max_bps'] = self.visualizer.create_top_attacks_by_max_bps_bar(holistic_data)
+            charts['top_attacks_max_pps'] = self.visualizer.create_top_attacks_by_max_pps_bar(holistic_data)
+            charts['security_events_by_policy'] = self.visualizer.create_security_events_by_policy_pie(holistic_data)
+            
             # Summary statistics
             charts['summary_stats'] = self.visualizer.create_summary_statistics_table(holistic_data, monthly_data)
             
@@ -181,7 +186,8 @@ class ReportGenerator:
             # Return empty charts dict to prevent complete failure
             return {key: '<div class="warning">Chart generation failed</div>' for key in [
                 'monthly_events', 'attack_types_monthly', 'volume_trends', 'hourly_heatmap',
-                'attack_type_pie', 'top_source_ips', 'protocol_distribution', 'daily_timeline', 'summary_stats'
+                'attack_type_pie', 'top_source_ips', 'protocol_distribution', 'daily_timeline', 
+                'top_attacks_max_bps', 'top_attacks_max_pps', 'security_events_by_policy', 'summary_stats'
             ]}
     
     def _create_executive_summary(self, holistic_data: Dict[str, Any], monthly_data: Dict[str, Any]) -> str:
@@ -365,6 +371,27 @@ class ReportGenerator:
                 <h3>Daily Attack Timeline</h3>
                 <div class="chart-container">
                     {charts['daily_timeline']}
+                </div>
+            </div>
+            
+            <!-- New Attack Analysis Charts -->
+            <div class="section">
+                <h2>Top Attack Analysis</h2>
+                <p>Analysis of the most impactful attacks by bandwidth and packet rate.</p>
+                
+                <h3>Top 5 Attacks by Maximum Bandwidth</h3>
+                <div class="chart-container">
+                    {charts['top_attacks_max_bps']}
+                </div>
+                
+                <h3>Top 5 Attacks by Maximum PPS</h3>
+                <div class="chart-container">
+                    {charts['top_attacks_max_pps']}
+                </div>
+                
+                <h3>Security Events by Policy (Top 5)</h3>
+                <div class="chart-container">
+                    {charts['security_events_by_policy']}
                 </div>
             </div>
             

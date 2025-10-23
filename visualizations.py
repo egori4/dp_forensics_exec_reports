@@ -1222,6 +1222,211 @@ class ForensicsVisualizer:
             return self.chart_preferences.get(chart_name, {})
         return self.chart_preferences.copy()
     
+    def create_top_attacks_by_max_bps_bar(self, holistic_data: Dict[str, Any], top_n: int = 5) -> str:
+        """
+        Create a bar chart showing top 5 attacks by maximum BPS.
+        
+        Args:
+            holistic_data: Dictionary with holistic analysis data
+            top_n: Number of top attacks to show
+            
+        Returns:
+            HTML string of the chart
+        """
+        try:
+            attack_max_bps = holistic_data.get('attack_max_bps', {})
+            
+            if not attack_max_bps:
+                return self._create_no_data_chart("Top Attacks by Max BPS", "No BPS data available for attacks")
+            
+            # Get top attacks by max BPS
+            top_attacks = sorted(attack_max_bps.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            
+            attack_names = [attack[0] for attack in top_attacks]
+            max_bps_values = [attack[1] for attack in top_attacks]
+            
+            # Convert to configured bandwidth unit
+            bandwidth_config = get_bandwidth_unit_config()
+            converted_bps = [bps / bandwidth_config['divider'] for bps in max_bps_values]
+            
+            fig = go.Figure(data=[go.Bar(
+                x=attack_names,
+                y=converted_bps,
+                marker=dict(color=self.colors['primary']),
+                hovertemplate=f'<b>%{{x}}</b><br>Max {bandwidth_config["unit_name"]}: %{{y:,.2f}}<extra></extra>'
+            )])
+            
+            layout = self.base_layout.copy()
+            layout.update({
+                'title': {
+                    'text': f'Top {top_n} Attacks by Maximum {bandwidth_config["unit_name"]}',
+                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'x': 0.5
+                },
+                'xaxis': {'title': 'Attack Name'},
+                'yaxis': {'title': f'Maximum {bandwidth_config["unit_name"]}'},
+                'showlegend': False,
+                'height': 500
+            })
+            
+            fig.update_layout(layout)
+            
+            # Disable zoom on axes for bar charts
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
+            
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
+            
+        except Exception as e:
+            logger.error(f"Failed to create top attacks by max BPS bar chart: {e}")
+            return self._create_error_chart("Top Attacks by Max BPS", str(e))
+    
+    def create_top_attacks_by_max_pps_bar(self, holistic_data: Dict[str, Any], top_n: int = 5) -> str:
+        """
+        Create a bar chart showing top 5 attacks by maximum PPS.
+        
+        Args:
+            holistic_data: Dictionary with holistic analysis data
+            top_n: Number of top attacks to show
+            
+        Returns:
+            HTML string of the chart
+        """
+        try:
+            attack_max_pps = holistic_data.get('attack_max_pps', {})
+            
+            if not attack_max_pps:
+                return self._create_no_data_chart("Top Attacks by Max PPS", "No PPS data available for attacks")
+            
+            # Get top attacks by max PPS
+            top_attacks = sorted(attack_max_pps.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            
+            attack_names = [attack[0] for attack in top_attacks]
+            max_pps_values = [attack[1] for attack in top_attacks]
+            
+            fig = go.Figure(data=[go.Bar(
+                x=attack_names,
+                y=max_pps_values,
+                marker=dict(color=self.colors['secondary']),
+                hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
+            )])
+            
+            layout = self.base_layout.copy()
+            layout.update({
+                'title': {
+                    'text': f'Top {top_n} Attacks by Maximum PPS',
+                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'x': 0.5
+                },
+                'xaxis': {'title': 'Attack Name'},
+                'yaxis': {'title': 'Maximum PPS'},
+                'showlegend': False,
+                'height': 500
+            })
+            
+            fig.update_layout(layout)
+            
+            # Disable zoom on axes for bar charts
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
+            
+            # Bar chart config - disable all zoom
+            bar_config = {
+                'displayModeBar': False,
+                'responsive': True,
+                'scrollZoom': False,
+                'doubleClick': False
+            }
+            
+            return self._convert_to_html(fig, bar_config)
+            
+        except Exception as e:
+            logger.error(f"Failed to create top attacks by max PPS bar chart: {e}")
+            return self._create_error_chart("Top Attacks by Max PPS", str(e))
+    
+    def create_security_events_by_policy_pie(self, holistic_data: Dict[str, Any], top_n: int = 10) -> str:
+        """
+        Create a pie chart showing security events distribution by policy (top 10).
+
+        Args:
+            holistic_data: Dictionary with holistic analysis data
+            top_n: Number of top policies to show
+            
+        Returns:
+            HTML string of the chart
+        """
+        try:
+            policies = holistic_data.get('policies', {})
+            
+            if not policies:
+                return self._create_no_data_chart("Security Events by Policy", "No policy data available")
+            
+            # Get top policies by event count
+            sorted_policies = sorted(policies.items(), key=lambda x: x[1], reverse=True)
+            top_policies = sorted_policies[:top_n]
+            
+            # Group remaining policies as "Others"
+            if len(sorted_policies) > top_n:
+                others_count = sum(count for _, count in sorted_policies[top_n:])
+                top_policies.append(("Others", others_count))
+            
+            labels = [policy[0] for policy in top_policies]
+            values = [policy[1] for policy in top_policies]
+            colors = self.chart_colors[:len(labels)]
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.4,  # Larger hole to make pie smaller
+                marker=dict(colors=colors),
+                textposition='outside',
+                texttemplate='%{label}, %{percent}',  # Single line with comma separation
+                textfont=dict(size=11),  # Smaller text to fit better
+                hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
+                # Improved text positioning for better visibility
+                textinfo='label+percent',
+                # Prevent text overlap by using pull for small slices
+                pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
+                # Move the pie chart further left to avoid title overlap
+                domain={'x': [0.0, 0.55], 'y': [0.1, 0.9]}  # Move pie chart further left
+            )])
+            
+            layout = self.base_layout.copy()
+            layout.update({
+                'title': {
+                    'text': f'Security Events by Policy (Top {top_n})',
+                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'x': 0.5,
+                    'y': 0.95  # Keep title high
+                },
+                'showlegend': True,
+                'legend': {
+                    'orientation': 'v',
+                    'yanchor': 'middle',
+                    'y': 0.5,
+                    'xanchor': 'left',
+                    'x': 0.65  # Adjust legend position for moved pie chart
+                },
+                'height': 600,
+                'margin': {'t': 80, 'b': 40, 'l': 10, 'r': 120}  # Adjusted margins - less left margin, more right for legend
+            })
+            
+            fig.update_layout(layout)
+            
+            return self._convert_to_html(fig)
+            
+        except Exception as e:
+            logger.error(f"Failed to create security events by policy pie chart: {e}")
+            return self._create_error_chart("Security Events by Policy", str(e))
+
     def get_available_chart_types(self, chart_name: str = None) -> Dict[str, List[str]]:
         """
         Get available chart types for a specific chart or all charts.

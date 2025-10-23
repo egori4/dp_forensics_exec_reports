@@ -40,8 +40,8 @@ OUTPUT_FORMATS = ['html']  # Available options: 'html', 'pdf'. Use ['html'] for 
 # Dynamic filters - exclude rows where column equals any of the specified values
 # Multiple filters use AND logic (row must match ALL conditions to be excluded)
 EXCLUDE_FILTERS = {
-    # 'Threat Category': ['Anomalies'],  # Exclude anomaly detection records from analysis
-    # 'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policies
+    # 'Threat Category': ['Anomalies'],  # Exclude Packet Anomalies and OOS detection records from analysis
+    # 'Policy Name': ['Packet Anomalies'],  # Example: exclude Packet Anomalies only
     # 'Attack Name': ['DNS RFC-compliance violation'],  # Example: exclude specific attacks
     # 'Risk': ['Low'],  # Example: exclude low-risk events
     # 'Direction': ['Internal'],  # Example: exclude internal traffic
@@ -67,12 +67,6 @@ REQUIRED_COLUMNS = [
 DATE_FORMATS = [
     '%d.%m.%Y %H:%M:%S',  # DD.MM.YYYY HH:MM:SS (preferred for European format)
     '%m.%d.%Y %H:%M:%S',  # MM.DD.YYYY HH:MM:SS (example format)
-    '%Y-%m-%d %H:%M:%S',  # YYYY-MM-DD HH:MM:SS
-    '%m/%d/%Y %H:%M:%S',  # MM/DD/YYYY HH:MM:SS
-    '%d/%m/%Y %H:%M:%S',  # DD/MM/YYYY HH:MM:SS
-    '%Y/%m/%d %H:%M:%S',  # YYYY/MM/DD HH:MM:SS
-    '%m-%d-%Y %H:%M:%S',  # MM-DD-YYYY HH:MM:SS
-    '%d-%m-%Y %H:%M:%S',  # DD-MM-YYYY HH:MM:SS
 ]
 
 # Force a specific date format (overrides auto-detection)
@@ -80,6 +74,155 @@ DATE_FORMATS = [
 # Use this when you know the exact format and auto-detection fails
 # Example: FORCE_DATE_FORMAT = '%d.%m.%Y %H:%M:%S'
 FORCE_DATE_FORMAT = None  # Set to specific format string to override auto-detection or None for auto-detection
+
+
+# Chart configuration
+CHART_CONFIG = {
+    'displayModeBar': False,
+    'responsive': True
+}
+
+CHART_LAYOUT = {
+    'font': {'family': 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif'},
+    'plot_bgcolor': 'white',
+    'paper_bgcolor': 'white',
+    'margin': {'l': 60, 'r': 60, 't': 80, 'b': 80},
+    'showlegend': True,
+    'legend': {
+        'orientation': 'h',
+        'yanchor': 'bottom',
+        'y': -0.2,
+        'xanchor': 'center',
+        'x': 0.5
+    }
+}
+
+# Chart size optimization configuration
+# Options for include_plotlyjs:
+# - 'inline': Embed full Plotly library in each chart (largest files ~37MB, works offline)
+# - 'cdn': Use Plotly CDN (smaller files ~116KB, requires internet)  
+# - 'directory': Use local Plotly file (medium size, works offline if file available)
+# - False: Only chart div, no Plotly library (smallest, requires manual Plotly inclusion)
+CHART_PLOTLYJS_MODE = 'cdn'  # Options: 'inline', 'cdn', 'directory', False
+
+# Log configuration
+LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
+LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+# Volume unit configuration
+VOLUME_UNIT = 'GB'  # Options: 'MB', 'GB', 'TB'
+VOLUME_UNIT_CONFIGS = {
+    'MB': {
+        'divider': 1,           # Mbits to MB: divide by 1 (already in Mbits, then divide by 8 for bytes)
+        'display_name': 'MB',
+        'chart_title': 'Aggregate Attack Volume (MB)',
+        'stats_label': 'Aggregate Attack Volume (MB)'
+    },
+    'GB': {
+        'divider': 1000,        # Mbits to GB: divide by 1000, then by 8 for bytes
+        'display_name': 'GB', 
+        'chart_title': 'Aggregate Attack Volume (GB)',
+        'stats_label': 'Aggregate Attack Volume (GB)'
+    },
+    'TB': {
+        'divider': 1000000,     # Mbits to TB: divide by 1,000,000, then by 8 for bytes
+        'display_name': 'TB',
+        'chart_title': 'Aggregate Attack Volume (TB)', 
+        'stats_label': 'Aggregate Attack Volume (TB)'
+    }
+}
+
+# Bandwidth unit configuration (tied to VOLUME_UNIT)
+# If VOLUME_UNIT is MB -> show Mbps, if GB -> show Gbps, if TB -> show Gbps
+BANDWIDTH_UNIT_CONFIGS = {
+    'MB': {
+        'divider': 1_000_000,       # bps to Mbps: divide by 1,000,000
+        'unit_name': 'Mbps',
+        'chart_title': 'Attack Max Mbps',
+        'stats_label': 'Attack Max Mbps',
+        'chart_name': 'Max Mbps',
+        'hover_template': '<b>%{x}</b><br>Max Mbps: %{y:,.2f}<extra></extra>'
+    },
+    'GB': {
+        'divider': 1_000_000_000,   # bps to Gbps: divide by 1,000,000,000
+        'unit_name': 'Gbps',
+        'chart_title': 'Attack Max Gbps',
+        'stats_label': 'Attack Max Gbps',
+        'chart_name': 'Max Gbps',
+        'hover_template': '<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
+    },
+    'TB': {
+        'divider': 1_000_000_000,   # bps to Gbps: divide by 1,000,000,000 (keep as Gbps for TB)
+        'unit_name': 'Gbps',
+        'chart_title': 'Attack Max Gbps',
+        'stats_label': 'Attack Max Gbps',
+        'chart_name': 'Max Gbps',
+        'hover_template': '<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
+    }
+}
+
+# Helper function to get current bandwidth unit config
+def get_bandwidth_unit_config():
+    return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])
+
+# Packet unit configuration
+PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
+PACKET_UNIT_CONFIGS = {
+    'M': {
+        'divider': 1_000_000,   # Convert to millions
+        'display_name': 'M',
+        'chart_title': 'Aggregate Attack Packets (Millions)',
+        'stats_label': 'Aggregate Attack Packets (Millions)'
+    },
+    'B': {
+        'divider': 1_000_000_000,  # Convert to billions
+        'display_name': 'B',
+        'chart_title': 'Aggregate Attack Packets (Billions)', 
+        'stats_label': 'Aggregate Attack Packets (Billions)'
+    },
+    '': {
+        'divider': 1,           # No conversion
+        'display_name': '',
+        'chart_title': 'Aggregate Attack Packets',
+        'stats_label': 'Aggregate Attack Packets'
+    }
+}
+
+# Chart type and styling configuration
+CHART_PREFERENCES = {
+    'monthly_events_trend': {
+        'type': 'bar',  # Options: 'line', 'bar'
+        'colors': {
+            'primary': '#003f7f',      # Main color for data
+            'hover': '#002d5a',        # Hover color
+        }
+    },
+    'attack_volume_trends': {
+        'type': 'bar',  # Options: 'line', 'bar'
+        'colors': {
+            'volume': '#003f7f',       # Total Volume color
+            'packets': '#6cb2eb',      # Total Packets color
+            'pps': '#ff6b35',          # Max PPS color
+            'bandwidth': '#28a745',    # Max Bandwidth color
+        }
+    },
+
+    'hourly_heatmap': {
+        'colorscale': 'Blues',  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma', etc. - Attack Intensity by Hour heatmap
+        'colors': {
+            'text': '#ffffff',
+            'background': '#f8f9fa',
+        }
+    }
+}
+
+# Available chart types for each visualization
+AVAILABLE_CHART_TYPES = {
+    'monthly_events_trend': ['line', 'bar'],           # Security Events Per Month
+    'attack_volume_trends': ['line', 'bar'],           # Attack Volume Trends Over Time (4 subplots)
+    'hourly_heatmap': ['heatmap'],                     # Attack Intensity by Hour heatmap
+}
+
 
 
 
@@ -472,165 +615,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 """
 
-# Chart configuration
-CHART_CONFIG = {
-    'displayModeBar': False,
-    'responsive': True
-}
 
-CHART_LAYOUT = {
-    'font': {'family': 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif'},
-    'plot_bgcolor': 'white',
-    'paper_bgcolor': 'white',
-    'margin': {'l': 60, 'r': 60, 't': 80, 'b': 80},
-    'showlegend': True,
-    'legend': {
-        'orientation': 'h',
-        'yanchor': 'bottom',
-        'y': -0.2,
-        'xanchor': 'center',
-        'x': 0.5
-    }
-}
-
-# Chart size optimization configuration
-# Options for include_plotlyjs:
-# - 'inline': Embed full Plotly library in each chart (largest files ~37MB, works offline)
-# - 'cdn': Use Plotly CDN (smaller files ~116KB, requires internet)  
-# - 'directory': Use local Plotly file (medium size, works offline if file available)
-# - False: Only chart div, no Plotly library (smallest, requires manual Plotly inclusion)
-CHART_PLOTLYJS_MODE = 'cdn'  # Options: 'inline', 'cdn', 'directory', False
-
-# Data precision for file size optimization
-CHART_DATA_PRECISION = {
-    'coordinates': 6,    # Decimal places for lat/lon coordinates  
-    'percentages': 2,    # Decimal places for percentages
-    'large_numbers': 0,  # Decimal places for counts > 1000
-    'small_numbers': 2,  # Decimal places for small values < 1000
-}
-
-# Log configuration
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
-LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-
-# Performance thresholds
-PERFORMANCE_THRESHOLDS = {
-    'small_file_mb': 10,      # Files under 10MB
-    'medium_file_mb': 100,    # Files 10-100MB  
-    'large_file_mb': 500,     # Files 100-500MB
-    'max_rows_warning': 1000000,  # Warn if over 1M rows
-}
-
-# Volume unit configuration
-VOLUME_UNIT = 'GB'  # Options: 'MB', 'GB', 'TB'
-VOLUME_UNIT_CONFIGS = {
-    'MB': {
-        'divider': 1,           # Mbits to MB: divide by 1 (already in Mbits, then divide by 8 for bytes)
-        'display_name': 'MB',
-        'chart_title': 'Aggregate Attack Volume (MB)',
-        'stats_label': 'Aggregate Attack Volume (MB)'
-    },
-    'GB': {
-        'divider': 1000,        # Mbits to GB: divide by 1000, then by 8 for bytes
-        'display_name': 'GB', 
-        'chart_title': 'Aggregate Attack Volume (GB)',
-        'stats_label': 'Aggregate Attack Volume (GB)'
-    },
-    'TB': {
-        'divider': 1000000,     # Mbits to TB: divide by 1,000,000, then by 8 for bytes
-        'display_name': 'TB',
-        'chart_title': 'Aggregate Attack Volume (TB)', 
-        'stats_label': 'Aggregate Attack Volume (TB)'
-    }
-}
-
-# Bandwidth unit configuration (tied to VOLUME_UNIT)
-# If VOLUME_UNIT is MB -> show Mbps, if GB -> show Gbps, if TB -> show Gbps
-BANDWIDTH_UNIT_CONFIGS = {
-    'MB': {
-        'divider': 1_000_000,       # bps to Mbps: divide by 1,000,000
-        'unit_name': 'Mbps',
-        'chart_title': 'Attack Max Mbps',
-        'stats_label': 'Attack Max Mbps',
-        'chart_name': 'Max Mbps',
-        'hover_template': '<b>%{x}</b><br>Max Mbps: %{y:,.2f}<extra></extra>'
-    },
-    'GB': {
-        'divider': 1_000_000_000,   # bps to Gbps: divide by 1,000,000,000
-        'unit_name': 'Gbps',
-        'chart_title': 'Attack Max Gbps',
-        'stats_label': 'Attack Max Gbps',
-        'chart_name': 'Max Gbps',
-        'hover_template': '<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
-    },
-    'TB': {
-        'divider': 1_000_000_000,   # bps to Gbps: divide by 1,000,000,000 (keep as Gbps for TB)
-        'unit_name': 'Gbps',
-        'chart_title': 'Attack Max Gbps',
-        'stats_label': 'Attack Max Gbps',
-        'chart_name': 'Max Gbps',
-        'hover_template': '<b>%{x}</b><br>Max Gbps: %{y:,.2f}<extra></extra>'
-    }
-}
-
-# Helper function to get current bandwidth unit config
-def get_bandwidth_unit_config():
-    return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])
-
-# Chart type and styling configuration
-CHART_PREFERENCES = {
-    'monthly_events_trend': {
-        'type': 'bar',  # Options: 'line', 'bar'
-        'colors': {
-            'primary': '#003f7f',      # Main color for data
-            'hover': '#002d5a',        # Hover color
-        }
-    },
-    'attack_volume_trends': {
-        'type': 'bar',  # Options: 'line', 'bar'
-        'colors': {
-            'volume': '#003f7f',       # Total Volume color
-            'packets': '#6cb2eb',      # Total Packets color
-            'pps': '#ff6b35',          # Max PPS color
-            'bandwidth': '#28a745',    # Max Bandwidth color
-        }
-    },
-
-    'hourly_heatmap': {
-        'colorscale': 'Blues',  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma', etc. - Attack Intensity by Hour heatmap
-        'colors': {
-            'text': '#ffffff',
-            'background': '#f8f9fa',
-        }
-    }
-}
-
-# Available chart types for each visualization
-AVAILABLE_CHART_TYPES = {
-    'monthly_events_trend': ['line', 'bar'],           # Security Events Per Month
-    'attack_volume_trends': ['line', 'bar'],           # Attack Volume Trends Over Time (4 subplots)
-    'hourly_heatmap': ['heatmap'],                     # Attack Intensity by Hour heatmap
-}
-
-# Packet unit configuration
-PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
-PACKET_UNIT_CONFIGS = {
-    'M': {
-        'divider': 1_000_000,   # Convert to millions
-        'display_name': 'M',
-        'chart_title': 'Aggregate Attack Packets (Millions)',
-        'stats_label': 'Aggregate Attack Packets (Millions)'
-    },
-    'B': {
-        'divider': 1_000_000_000,  # Convert to billions
-        'display_name': 'B',
-        'chart_title': 'Aggregate Attack Packets (Billions)', 
-        'stats_label': 'Aggregate Attack Packets (Billions)'
-    },
-    '': {
-        'divider': 1,           # No conversion
-        'display_name': '',
-        'chart_title': 'Aggregate Attack Packets',
-        'stats_label': 'Aggregate Attack Packets'
-    }
-}

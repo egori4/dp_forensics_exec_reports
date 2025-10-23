@@ -300,6 +300,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Change/Fixes/Features                                                                      |
 |---------|--------------------------------------------------------------------------------------------|
+| v2.0.0  | - 10/23/25 - Added new charts: 1.Top 5 attacks by Gbps 2. Top 5 attacks by PPS 3. Security Events by Policy  |
 | v1.1.9  | - 10/21/25 - Enhanced identification of the first complete month(challenge with Packet Anomalies unfiltered) |
 | v1.1.8  | - 10/21/25 - Enhanced Attack Type Distribution pie chart visualization, style and to avoid overlap between categories and title |
 | v1.1.7  | - 10/21/25 - Updated height of the bar charts to not overlap legend with axis x text
