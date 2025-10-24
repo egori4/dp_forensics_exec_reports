@@ -7,7 +7,8 @@ A professional Python-based tool that processes DefensePro forensics data from C
 - **Memory-Efficient Processing**: Handles files from 1MB to 1GB+ using chunked processing
 - **Intelligent Date Parsing**: Automatically detects and handles multiple date formats
 - **Month-to-Month Trends**: Analyzes complete calendar months for accurate trend analysis
-- **Interactive Visualizations**: Professional charts with Radware branding using Plotly
+- **Interactive Visualizations**: Professional charts with configurable themes using Plotly
+- **Comprehensive Chart Customization**: 6 color palettes and 11 configurable chart types
 - **Dual Output Formats**: Generates both HTML (interactive) and PDF reports
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 - **Comprehensive Analysis**: Both holistic (entire dataset) and trend (monthly) analysis
@@ -170,12 +171,37 @@ Edit `config.py` to adjust:
 - `CHUNK_SIZE`: Rows processed per chunk (default: 50,000)
 - `MAX_MEMORY_USAGE_GB`: Memory warning threshold (default: 2GB)
 
-### Visual Styling
+### Chart Customization
 
-Modify `RADWARE_COLORS` and `CHART_COLORS` in `config.py` to customize:
-- Brand colors
-- Chart color palettes
-- Report styling
+The tool provides extensive chart customization options in `config.py`:
+
+**Color Themes**: Choose from 6 professionally designed color palettes:
+- `ACTIVE_COLOR_PALETTE`: Switch between 'radware_corporate', 'professional_blue', 'modern_minimal', 'vibrant_corporate', 'high_contrast', 'colorblind_friendly'
+
+**Chart Types**: Configure visualization types for each chart:
+- `CHART_PREFERENCES`: Set chart types (line, bar, pie, donut, heatmap, area, etc.)
+
+**Individual Overrides**: Customize specific chart colors:
+- `CHART_COLOR_ASSIGNMENTS`: Override colors for individual charts while keeping global theme
+
+**Example - Switch to Professional Blue theme:**
+```python
+ACTIVE_COLOR_PALETTE = 'professional_blue'  # Instead of 'radware_corporate'
+```
+
+**Example - Change chart types:**
+```python
+CHART_PREFERENCES = {
+    'monthly_events_trend': {
+        'default_type': 'line',  # Change from 'bar' to 'line'
+        # ... other configuration
+    },
+    'attack_type_distribution': {
+        'default_type': 'donut',  # Change from 'pie' to 'donut'
+        # ... other configuration
+    }
+}
+```
 
 ## 📈 Performance Guidance
 
@@ -300,6 +326,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Change/Fixes/Features                                                                      |
 |---------|--------------------------------------------------------------------------------------------|
+| v2.0.1  | - 10/24/25 - Major UX Enhancement: Added user-configurable control for chart types, layouts, and colors. Improved config.py architecture for intuitive customization. Introduced color palettes with individual chart override support if needed. Updated documentation with customization examples. |
 | v2.0.0  | - 10/23/25 - Added new charts: 1.Top 5 attacks by Gbps 2. Top 5 attacks by PPS 3. Security Events by Policy  |
 | v1.1.9  | - 10/21/25 - Enhanced identification of the first complete month(challenge with Packet Anomalies unfiltered) |
 | v1.1.8  | - 10/21/25 - Enhanced Attack Type Distribution pie chart visualization, style and to avoid overlap between categories and title |
@@ -324,6 +351,40 @@ This tool is designed for internal use with DefensePro forensics data. Please en
    |
 | v1.0.1  | - Added filtering. Use new EXCLUDE_FILTERS var under config.py |
 | v1.0.0  | - Initial release<br>- Support for CSV and ZIP input files<br>- HTML and PDF report generation<br>- Interactive Plotly visualizations<br>- Memory-efficient processing<br>- Cross-platform compatibility<br>- Batch processing support |
+
+
+## 🔄 Key Improvements & Features
+
+### Core Analysis Engine
+- **Memory-Efficient Processing**: Intelligent chunked processing handles files from MB to GB+ sizes
+- **Smart Date Detection**: Automatic format recognition with manual override capabilities
+- **Complete Month Analysis**: Sophisticated algorithm identifies and analyzes complete calendar months for accurate trending
+- **Data Quality Validation**: Built-in validation and cleansing with transparent reporting
+
+### Advanced Visualization System
+- **Professional Color Palettes**: 6 scientifically designed themes including corporate branding, accessibility, and colorblind-friendly options
+- **Flexible Chart Types**: 11 fully configurable visualization types (line, bar, pie, donut, heatmap, area, stacked, horizontal)
+- **Granular Customization**: Individual chart color overrides while maintaining global theme consistency
+- **Modern Configuration Architecture**: Clean separation of settings and logic with immediate hot-reload capability
+
+### Comprehensive Security Analysis
+- **Multi-Dimensional Trending**: Month-over-month analysis of attack patterns, volumes, and intensities
+- **Attack Profiling**: Detailed breakdown by type, source, protocol, policy, and temporal patterns
+- **Performance Metrics**: Bandwidth utilization, packet rates, and volume analysis with configurable units
+- **Executive Reporting**: Professional summaries with expandable technical details
+
+### User Experience Excellence
+- **One-Click Theming**: Instantly switch color schemes across entire report suite
+- **Cross-Platform Compatibility**: Seamless operation on Windows, Linux, and macOS
+- **Dual Output Formats**: Interactive HTML and print-ready PDF with consistent styling
+- **Batch Processing**: Multiple file analysis with consolidated summary reporting
+- **Command-Line Flexibility**: Comprehensive CLI with format control and verbose logging
+
+### Technical Architecture
+- **Configuration-Driven**: All customization through centralized, well-documented configuration files
+- **Performance Optimized**: CDN-based chart delivery reduces file sizes from 37MB to 116KB
+- **Extensible Design**: Modular architecture supports easy addition of new chart types and analysis methods
+- **Professional Deployment**: Ready for enterprise environments with comprehensive troubleshooting documentation
 
 ---
 

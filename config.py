@@ -1,82 +1,299 @@
 """
 Configuration constants for the Forensics Data Analysis & Report Generator
+
+This file contains all user-configurable options for the Forensics Report Generator.
+Users can modify these settings to customize report appearance and chart types without 
+modifying the core code.
+
+Configuration sections are organized by importance and usage frequency:
+1. Core Settings (most important, commonly changed)
+2. Data Processing & Input/Output
+3. Visualization Configuration
+4. Advanced Chart Settings
+5. Report Styling
 """
 
-# Chart styling constants for Radware branding
-RADWARE_COLORS = {
-    'primary': '#003f7f',      # Radware blue
-    'secondary': '#6cb2eb',    # Light blue
-    'accent': '#ff6b35',       # Orange accent
-    'success': '#28a745',      # Green
-    'warning': '#ffc107',      # Yellow
-    'danger': '#dc3545',       # Red
-    'dark': '#343a40',         # Dark gray
-    'light': '#f8f9fa',        # Light gray
-    'background': '#ffffff',    # White background
-}
+# ============================================================================
+# 1. CORE SETTINGS - MOST IMPORTANT & COMMONLY CHANGED
+# ============================================================================
 
-# Color palette for charts (colorblind friendly)
-CHART_COLORS = [
-    '#003f7f', '#6cb2eb', '#ff6b35', '#28a745', '#ffc107',
-    '#dc3545', '#17a2b8', '#6f42c1', '#e83e8c', '#fd7e14',
-    '#20c997', '#6610f2', '#e91e63', '#795548', '#607d8b'
-]
+# Output format configuration - Controls what file formats are generated
+# DEFAULT OUTPUT FORMATS - used when no specific format is requested
+# Command-line overrides: --format html, --format pdf, --format both
+OUTPUT_FORMATS = ['html']  # Options: 'html', 'pdf', or ['html', 'pdf'] for both
 
-# Data processing constants
-CHUNK_SIZE = 50000  # Number of rows to process at once
-MAX_MEMORY_USAGE_GB = 2  # Maximum memory usage in GB before warning
-
-# Output format configuration
-# DEFAULT OUTPUT FORMATS - controls what formats are generated when no specific format is requested
-# This setting is used when:
-#   - Running `python analyzer.py` (default behavior)
-#   - Running `python analyzer.py --format both` (uses config setting)
-# Command-line overrides still work:
-#   - `python analyzer.py --format html` (HTML only, ignores config)
-#   - `python analyzer.py --format pdf` (PDF only, ignores config)
-OUTPUT_FORMATS = ['html']  # Available options: 'html', 'pdf'. Use ['html'] for HTML only, ['pdf'] for PDF only, or ['html', 'pdf'] for both
-
-# Data filtering options
-# Dynamic filters - exclude rows where column equals any of the specified values
+# Data filtering options - exclude rows where column equals specified values
 # Multiple filters use AND logic (row must match ALL conditions to be excluded)
 EXCLUDE_FILTERS = {
-    # 'Threat Category': ['Anomalies'],  # Exclude Packet Anomalies and OOS detection records from analysis
-    # 'Policy Name': ['Packet Anomalies'],  # Example: exclude Packet Anomalies only
+    # 'Threat Category': ['Anomalies'],     # Example: exclude Packet Anomalies and OOS detection
+    # 'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policy
     # 'Attack Name': ['DNS RFC-compliance violation'],  # Example: exclude specific attacks
-    # 'Risk': ['Low'],  # Example: exclude low-risk events
-    # 'Direction': ['Internal'],  # Example: exclude internal traffic
+    # 'Risk': ['Low'],                      # Example: exclude low-risk events
+    # 'Direction': ['Internal'],            # Example: exclude internal traffic
 }
 
-# Expected CSV columns (some may be missing depending on device)
-EXPECTED_COLUMNS = [
-    'S.No', 'Start Time', 'End Time', 'Device IP Address', 'Threat Category',
-    'Attack Name', 'Policy Name', 'Action', 'Attack ID', 'Source IP Address',
-    'Source Port', 'Destination IP Address', 'Destination Port', 'Direction',
-    'Protocol', 'Radware ID', 'Duration', 'Total Packets', 'Packet Type',
-    'Total Mbits', 'Max pps', 'Max bps', 'Physical Port', 'Risk', 'VLAN Tag',
-    'Footprint', 'Device Name', 'Device Type', 'Workflow Rule Process',
-    'Activation Id', 'Protected Object'
-]
-
-# Required columns for basic functionality
-REQUIRED_COLUMNS = [
-    'Start Time', 'Attack Name', 'Source IP Address', 'Destination IP Address'
-]
-
-# Date formats to try (in order of preference)
-DATE_FORMATS = [
-    '%d.%m.%Y %H:%M:%S',  # DD.MM.YYYY HH:MM:SS (preferred for European format)
-    '%m.%d.%Y %H:%M:%S',  # MM.DD.YYYY HH:MM:SS (example format)
-]
-
-# Force a specific date format (overrides auto-detection)
-# Set to None for auto-detection, or specify exact format string
-# Use this when you know the exact format and auto-detection fails
-# Example: FORCE_DATE_FORMAT = '%d.%m.%Y %H:%M:%S'
-FORCE_DATE_FORMAT = None  # Set to specific format string to override auto-detection or None for auto-detection
+# Volume and packet display units - Controls how data is displayed in charts and statistics
+VOLUME_UNIT = 'GB'  # Options: 'MB', 'GB', 'TB' - affects bandwidth display (MB→Mbps, GB→Gbps, TB→Gbps)
+PACKET_UNIT = 'M'   # Options: 'M' (millions), 'B' (billions), '' (no conversion)
 
 
-# Chart configuration
+# Active color scheme - Change this to switch between color themes
+ACTIVE_COLOR_PALETTE = 'radware_corporate'  # Options: 'radware_corporate', 'professional_blue', 'modern_minimal', 'vibrant_corporate', 'high_contrast', 'colorblind_friendly'
+
+# ============================================================================
+# 3. VISUALIZATION CONFIGURATION - CHART TYPES & COLORS
+# ============================================================================
+
+# Color palette definitions - Choose colors for different themes
+COLOR_PALETTES = {
+    # Radware Corporate (default)
+    'radware_corporate': [
+        '#003f7f', '#6cb2eb', '#ff6b35', '#28a745', '#ffc107',
+        '#dc3545', '#17a2b8', '#6f42c1', '#e83e8c', '#fd7e14',
+        '#20c997', '#6610f2', '#e91e63', '#795548', '#607d8b'
+    ],
+    
+    # Professional Blue Theme
+    'professional_blue': [
+        '#1f4e79', '#2e75b6', '#5b9bd5', '#9fc5e8', '#cfe2f3',
+        '#003f7f', '#34495e', '#6cb2eb', '#3a6ea5', '#b4c6e7',
+        '#1a2634', '#274472', '#41729f', '#5885af', '#bfd7ed'
+    ],
+
+    # Modern Minimal
+    'modern_minimal': [
+        '#2c3e50', '#34495e', '#95a5a6', '#bdc3c7', '#ecf0f1',
+        '#e74c3c', '#e67e22', '#f39c12', '#27ae60', '#3498db'
+    ],
+    
+    # Vibrant Corporate
+    'vibrant_corporate': [
+        '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+        '#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#f1c40f'
+    ],
+    
+    # High Contrast (accessibility friendly)
+    'high_contrast': [
+        '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff',
+        '#ffff00', '#ff00ff', '#00ffff', '#800000', '#008000'
+    ],
+    
+    # Colorblind Friendly (deuteranopia/protanopia safe)
+    'colorblind_friendly': [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+    ]
+}
+
+# Chart preferences - Complete chart configuration in one place
+# Each chart has a 'default_type' and type-specific configurations
+
+# Specific color assignments for chart elements (optional overrides, uncomment only if you want to modify specific colors)
+CHART_COLOR_ASSIGNMENTS = {
+    # # 1. Monthly trends chart colors
+    # 'monthly_events_trend_colors': ['#003f7f'],  # Main trend line/bar color
+    
+    # # 2. Attack types stacked bar colors (monthly)
+    # 'attack_types_stacked_bar_colors': ['#003f7f', '#6cb2eb', '#ff6b35', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#e83e8c', '#fd7e14'],
+    
+    # # 3. Attack volume trends colors (4 different metrics)
+    # 'attack_volume_trends_colors': {
+    #     'volume': '#003f7f',       # Total Volume color
+    #     'packets': '#6cb2eb',      # Total Packets color  
+    #     'pps': '#ff6b35',          # Max PPS color
+    #     'bandwidth': '#28a745',    # Max Bandwidth color
+    # },
+    
+    # # 4. Hourly heatmap colors
+    # 'hourly_heatmap_colors': {'colorscale': 'Reds'},  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma'
+    
+    # # 5. Attack type distribution colors (pie chart)
+    # 'attack_type_distribution_colors': ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#f1c40f'],
+    
+    # # 6. Top source IPs colors
+    # 'top_source_ips_colors': ['#f1440f'],
+    
+    # # 7. Protocol distribution colors
+    # 'protocol_distribution_colors': ['#ee131e'],
+    
+    # # 8. Daily timeline colors
+    # 'daily_timeline_colors': ['#ff9500'],
+    
+    # # 9. Top attacks by max BPS colors
+    # 'top_attacks_max_bps_colors': ['#15ec32'],
+    
+    # # 10. Top attacks by max PPS colors
+    # 'top_attacks_max_pps_colors': ['#230cf7'],
+    
+    # # 11. Security events by policy colors (pie chart)
+    # 'policy_distribution_colors': ["#1c0ab9", '#9b99ae', '#8b899e', '#7b7996', '#6b698e', '#5b5986', '#4b497e', '#3b3976', '#2b296e', '#1b1966'],
+
+}
+
+
+# Chart preferences - Complete chart configuration
+CHART_PREFERENCES = {
+    # Monthly trends chart
+    'monthly_events_trend': {
+        'default_type': 'bar',  # Options: 'line', 'bar', 'area'
+        'line': {
+            'mode': 'lines+markers',
+            'line_width': 3,
+            'marker_size': 8,
+            'show_trend': True  # Show trend line for line charts
+        },
+        'bar': {
+            'show_values': True,  # Show values on bars
+            'show_trend': True,   # Show trend line for bar charts too
+            'bar_width': 0.6
+        },
+        'area': {
+            'fill': 'tonexty',
+            'line_width': 2,
+            'show_trend': True
+        }
+    },
+    
+    # Attack volume trends (4 subplots)
+    'attack_volume_trends': {
+        'default_type': 'bar',  # Options: 'line', 'bar'
+        'line': {
+            'mode': 'lines+markers',
+            'line_width': 2,
+            'marker_size': 6,
+            'show_trend': False  # No trend for multi-subplot charts
+        },
+        'bar': {
+            'show_values': False,  # Too cluttered with 4 subplots
+            'show_trend': False,
+            'bar_width': 0.7
+        }
+    },
+    
+    # Distribution charts (pie, donut, bar)
+    'attack_type_distribution': {
+        'default_type': 'pie',  # Options: 'pie', 'donut', 'bar', 'horizontal_bar'
+        'pie': {
+            'hole': 0,  # Full pie
+            'textinfo': 'label+percent',
+            'textposition': 'outside'
+        },
+        'donut': {
+            'hole': 0.4,  # Donut hole size
+            'textinfo': 'label+percent', 
+            'textposition': 'outside'
+        },
+        'bar': {
+            'orientation': 'vertical',
+            'show_values': True,
+            'sort_values': 'descending'
+        }
+    },
+    
+    # Policy distribution (same options as attack type)
+    'policy_distribution': {
+        'default_type': 'pie',  # Options: 'pie', 'donut', 'bar', 'horizontal_bar'
+        'pie': {
+            'hole': 0,
+            'textinfo': 'label+percent',
+            'textposition': 'outside'
+        },
+        'donut': {
+            'hole': 0.4,
+            'textinfo': 'label+percent',
+            'textposition': 'outside'
+        },
+        'bar': {
+            'orientation': 'vertical', 
+            'show_values': True,
+            'sort_values': 'descending'
+        }
+    },
+    
+    # Ranking charts (source IPs, protocols, top attacks)
+    'top_source_ips': {
+        'default_type': 'horizontal_bar',  # Options: 'bar', 'horizontal_bar'
+        'horizontal_bar': {
+            'orientation': 'horizontal',
+            'show_values': True,
+            'sort_values': 'descending'
+        },
+        'bar': {
+            'orientation': 'vertical',
+            'show_values': True,
+            'sort_values': 'descending'
+        }
+    },
+    
+    'protocol_distribution': {
+        'default_type': 'bar',  # Options: 'bar', 'horizontal_bar'
+        'bar': {
+            'orientation': 'vertical',
+            'show_values': True, 
+            'sort_values': 'descending'
+        },
+        'horizontal_bar': {
+            'orientation': 'horizontal',
+            'show_values': True,
+            'sort_values': 'descending'
+        }
+    },
+    
+    'top_attacks_max_bps': {
+        'default_type': 'bar',  # Options: 'bar', 'horizontal_bar'
+        'bar': {
+            'orientation': 'vertical',
+            'show_values': True,
+            'sort_values': 'descending'
+        },
+        'horizontal_bar': {
+            'orientation': 'horizontal', 
+            'show_values': True,
+            'sort_values': 'descending'
+        }
+    },
+    
+    'top_attacks_max_pps': {
+        'default_type': 'bar',  # Options: 'bar', 'horizontal_bar'
+        'bar': {
+            'orientation': 'vertical',
+            'show_values': True,
+            'sort_values': 'descending'
+        },
+        'horizontal_bar': {
+            'orientation': 'horizontal',
+            'show_values': True, 
+            'sort_values': 'descending'
+        }
+    },
+    
+    # Heatmap
+    'hourly_heatmap': {
+        'default_type': 'heatmap',  # Only one option
+        'heatmap': {
+            'colorscale': 'Blues'  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma'
+        }
+    },
+    
+    # Timeline chart
+    'daily_timeline': {
+        'default_type': 'line',  # Options: 'line', 'area', 'bar'
+        'line': {
+            'mode': 'lines+markers',
+            'line_width': 2,
+            'marker_size': 4,
+            'fill': 'tonexty',
+            'show_trend': False  # Timeline doesn't need trend
+        },
+        'area': {
+            'fill': 'tonexty',
+            'line_width': 2,
+            'show_trend': False
+        }
+    }
+}
+
+# Chart rendering configuration
 CHART_CONFIG = {
     'displayModeBar': False,
     'responsive': True
@@ -97,20 +314,12 @@ CHART_LAYOUT = {
     }
 }
 
-# Chart size optimization configuration
-# Options for include_plotlyjs:
-# - 'inline': Embed full Plotly library in each chart (largest files ~37MB, works offline)
-# - 'cdn': Use Plotly CDN (smaller files ~116KB, requires internet)  
-# - 'directory': Use local Plotly file (medium size, works offline if file available)
-# - False: Only chart div, no Plotly library (smallest, requires manual Plotly inclusion)
-CHART_PLOTLYJS_MODE = 'cdn'  # Options: 'inline', 'cdn', 'directory', False
 
-# Log configuration
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
-LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+# ============================================================================
+# ADVANCED CHART SETTINGS & UNIT CONFIGURATIONS
+# ============================================================================
 
-# Volume unit configuration
-VOLUME_UNIT = 'GB'  # Options: 'MB', 'GB', 'TB'
+# Volume unit configuration details
 VOLUME_UNIT_CONFIGS = {
     'MB': {
         'divider': 1,           # Mbits to MB: divide by 1 (already in Mbits, then divide by 8 for bytes)
@@ -132,8 +341,29 @@ VOLUME_UNIT_CONFIGS = {
     }
 }
 
-# Bandwidth unit configuration (tied to VOLUME_UNIT)
-# If VOLUME_UNIT is MB -> show Mbps, if GB -> show Gbps, if TB -> show Gbps
+# Packet unit configuration details
+PACKET_UNIT_CONFIGS = {
+    'M': {
+        'divider': 1_000_000,   # Convert to millions
+        'display_name': 'M',
+        'chart_title': 'Aggregate Attack Packets (Millions)',
+        'stats_label': 'Aggregate Attack Packets (Millions)'
+    },
+    'B': {
+        'divider': 1_000_000_000,  # Convert to billions
+        'display_name': 'B',
+        'chart_title': 'Aggregate Attack Packets (Billions)', 
+        'stats_label': 'Aggregate Attack Packets (Billions)'
+    },
+    '': {
+        'divider': 1,           # No conversion
+        'display_name': '',
+        'chart_title': 'Aggregate Attack Packets',
+        'stats_label': 'Aggregate Attack Packets'
+    }
+}
+
+# Bandwidth unit configuration (automatically tied to VOLUME_UNIT)
 BANDWIDTH_UNIT_CONFIGS = {
     'MB': {
         'divider': 1_000_000,       # bps to Mbps: divide by 1,000,000
@@ -161,72 +391,63 @@ BANDWIDTH_UNIT_CONFIGS = {
     }
 }
 
-# Helper function to get current bandwidth unit config
-def get_bandwidth_unit_config():
-    return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])
 
-# Packet unit configuration
-PACKET_UNIT = 'M'  # Options: 'M' (millions), 'B' (billions), '' (no conversion)
-PACKET_UNIT_CONFIGS = {
-    'M': {
-        'divider': 1_000_000,   # Convert to millions
-        'display_name': 'M',
-        'chart_title': 'Aggregate Attack Packets (Millions)',
-        'stats_label': 'Aggregate Attack Packets (Millions)'
-    },
-    'B': {
-        'divider': 1_000_000_000,  # Convert to billions
-        'display_name': 'B',
-        'chart_title': 'Aggregate Attack Packets (Billions)', 
-        'stats_label': 'Aggregate Attack Packets (Billions)'
-    },
-    '': {
-        'divider': 1,           # No conversion
-        'display_name': '',
-        'chart_title': 'Aggregate Attack Packets',
-        'stats_label': 'Aggregate Attack Packets'
-    }
+# ============================================================================
+# DATA PROCESSING & INPUT/OUTPUT CONFIGURATION
+# ============================================================================
+
+# Data processing performance settings
+CHUNK_SIZE = 50000              # Number of rows to process at once
+MAX_MEMORY_USAGE_GB = 2         # Maximum memory usage in GB before warning
+
+# Data filtering options - exclude rows where column equals specified values
+# Multiple filters use AND logic (row must match ALL conditions to be excluded)
+EXCLUDE_FILTERS = {
+    # 'Threat Category': ['Anomalies'],     # Example: exclude Packet Anomalies and OOS detection
+    # 'Policy Name': ['Packet Anomalies'],  # Example: exclude specific policy
+    # 'Attack Name': ['DNS RFC-compliance violation'],  # Example: exclude specific attacks
+    # 'Risk': ['Low'],                      # Example: exclude low-risk events
+    # 'Direction': ['Internal'],            # Example: exclude internal traffic
 }
 
-# Chart type and styling configuration
-CHART_PREFERENCES = {
-    'monthly_events_trend': {
-        'type': 'bar',  # Options: 'line', 'bar'
-        'colors': {
-            'primary': '#003f7f',      # Main color for data
-            'hover': '#002d5a',        # Hover color
-        }
-    },
-    'attack_volume_trends': {
-        'type': 'bar',  # Options: 'line', 'bar'
-        'colors': {
-            'volume': '#003f7f',       # Total Volume color
-            'packets': '#6cb2eb',      # Total Packets color
-            'pps': '#ff6b35',          # Max PPS color
-            'bandwidth': '#28a745',    # Max Bandwidth color
-        }
-    },
+# CSV column configuration
+EXPECTED_COLUMNS = [
+    'S.No', 'Start Time', 'End Time', 'Device IP Address', 'Threat Category',
+    'Attack Name', 'Policy Name', 'Action', 'Attack ID', 'Source IP Address',
+    'Source Port', 'Destination IP Address', 'Destination Port', 'Direction',
+    'Protocol', 'Radware ID', 'Duration', 'Total Packets', 'Packet Type',
+    'Total Mbits', 'Max pps', 'Max bps', 'Physical Port', 'Risk', 'VLAN Tag',
+    'Footprint', 'Device Name', 'Device Type', 'Workflow Rule Process',
+    'Activation Id', 'Protected Object'
+]
 
-    'hourly_heatmap': {
-        'colorscale': 'Blues',  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma', etc. - Attack Intensity by Hour heatmap
-        'colors': {
-            'text': '#ffffff',
-            'background': '#f8f9fa',
-        }
-    }
-}
+REQUIRED_COLUMNS = [
+    'Start Time', 'Attack Name', 'Source IP Address', 'Destination IP Address'
+]
 
-# Available chart types for each visualization
-AVAILABLE_CHART_TYPES = {
-    'monthly_events_trend': ['line', 'bar'],           # Security Events Per Month
-    'attack_volume_trends': ['line', 'bar'],           # Attack Volume Trends Over Time (4 subplots)
-    'hourly_heatmap': ['heatmap'],                     # Attack Intensity by Hour heatmap
-}
+# Date parsing configuration
+DATE_FORMATS = [
+    '%d.%m.%Y %H:%M:%S',  # DD.MM.YYYY HH:MM:SS (preferred for European format)
+    '%m.%d.%Y %H:%M:%S',  # MM.DD.YYYY HH:MM:SS (example format)
+]
+
+# Force specific date format (overrides auto-detection)
+# Set to None for auto-detection, or specify exact format string
+FORCE_DATE_FORMAT = None  # Example: '%d.%m.%Y %H:%M:%S' or None for auto-detection
+
+# Logging configuration
+LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
+LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+# Chart size optimization - Balance between file size and offline capability
+CHART_PLOTLYJS_MODE = 'cdn'  # Options: 'inline' (largest, offline), 'cdn' (smallest, needs internet), 'directory', False
 
 
+# ============================================================================
+# 5. REPORT STYLING & HTML TEMPLATE
+# ============================================================================
 
-
-# Report styling
+# Report CSS styling
 REPORT_CSS = """
 <style>
     body {

@@ -947,3 +947,47 @@ def calculate_percentage(part: Union[int, float], total: Union[int, float]) -> f
 
 # Add pandas import here for compatibility
 import pandas as pd
+
+
+# ============================================================================
+# COLOR CONFIGURATION UTILITIES
+# ============================================================================
+
+def get_active_color_palette():
+    """
+    Get the currently active color palette.
+    
+    Returns:
+        List of color strings from the active palette
+    """
+    from config import COLOR_PALETTES, ACTIVE_COLOR_PALETTE
+    return COLOR_PALETTES.get(ACTIVE_COLOR_PALETTE, COLOR_PALETTES['radware_corporate'])
+
+
+def get_chart_colors(chart_name):
+    """
+    Get colors for a specific chart, falling back to active palette.
+    
+    Args:
+        chart_name: Name of the chart
+        
+    Returns:
+        List of color strings or dict of color assignments
+    """
+    from config import CHART_COLOR_ASSIGNMENTS
+    
+    chart_colors = CHART_COLOR_ASSIGNMENTS.get(f'{chart_name}_colors', {})
+    if not chart_colors or chart_colors.get('use_palette', True):
+        return get_active_color_palette()
+    return chart_colors
+
+
+def get_bandwidth_unit_config():
+    """
+    Get the current bandwidth unit configuration.
+    
+    Returns:
+        Dict with bandwidth unit configuration
+    """
+    from config import BANDWIDTH_UNIT_CONFIGS, VOLUME_UNIT
+    return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])

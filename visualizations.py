@@ -31,12 +31,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from config import (
-    RADWARE_COLORS, CHART_COLORS, CHART_CONFIG, CHART_LAYOUT, 
+    CHART_COLOR_ASSIGNMENTS, CHART_PREFERENCES, CHART_CONFIG, CHART_LAYOUT,
     VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS,
-    get_bandwidth_unit_config, CHART_PLOTLYJS_MODE, CHART_PREFERENCES,
-    AVAILABLE_CHART_TYPES
+    CHART_PLOTLYJS_MODE
 )
-from utils import format_number, calculate_percentage
+from utils import (
+    format_number, calculate_percentage, get_active_color_palette, 
+    get_chart_colors, get_bandwidth_unit_config
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +49,95 @@ class ForensicsVisualizer:
     """
     
     def __init__(self):
-        """Initialize the visualizer with Radware styling."""
-        self.colors = RADWARE_COLORS
-        self.chart_colors = CHART_COLORS
+        """Initialize the visualizer with user-configurable styling."""
+        self.active_palette = get_active_color_palette()
+        self.chart_colors = self.active_palette  # Default to active palette
         self.base_layout = CHART_LAYOUT.copy()
         self.chart_preferences = CHART_PREFERENCES
-        self.available_types = AVAILABLE_CHART_TYPES
+        self.color_assignments = CHART_COLOR_ASSIGNMENTS
         
-        logger.info("Initialized ForensicsVisualizer with Radware styling")
+        logger.info("Initialized ForensicsVisualizer with configurable styling")
+    
+    def _get_chart_color(self, chart_name: str, color_key: str = 'primary', fallback_index: int = 0):
+        """
+        Get color for a specific chart element.
+        
+        Args:
+            chart_name: Name of the chart (e.g., 'monthly_trends', 'attack_type')
+            color_key: Specific color key (e.g., 'primary', 'volume', 'packets') or index for list format
+            fallback_index: Index in palette to use as fallback
+            
+        Returns:
+            Color string (hex code)
+        """
+        # Check for specific color assignment
+        color_assignment_key = f'{chart_name}_colors'
+        if color_assignment_key in self.color_assignments:
+            chart_colors = self.color_assignments[color_assignment_key]
+            
+            # Handle list format (new approach)
+            if isinstance(chart_colors, list):
+                if isinstance(fallback_index, int) and 0 <= fallback_index < len(chart_colors):
+                    return chart_colors[fallback_index]
+                elif len(chart_colors) > 0:
+                    return chart_colors[0]  # Default to first color
+                    
+            # Handle dict format (backward compatibility)
+            elif isinstance(chart_colors, dict) and color_key in chart_colors:
+                return chart_colors[color_key]
+        
+        # Fall back to active palette
+        return self.active_palette[fallback_index % len(self.active_palette)]
+    
+    def _get_chart_colors_list(self, chart_name: str):
+        """
+        Get list of colors for a chart that needs multiple colors.
+        
+        Args:
+            chart_name: Name of the chart
+            
+        Returns:
+            List of color strings
+        """
+        # Check for specific color assignment
+        color_assignment_key = f'{chart_name}_colors'
+        if color_assignment_key in self.color_assignments:
+            chart_colors = self.color_assignments[color_assignment_key]
+            
+            # Handle list format (new approach) - return the list directly
+            if isinstance(chart_colors, list):
+                return chart_colors
+                
+            # Handle dict format (backward compatibility) - extract color values
+            elif isinstance(chart_colors, dict) and len(chart_colors) > 1:
+                # Return the values if they're colors
+                color_values = [v for v in chart_colors.values() if isinstance(v, str) and v.startswith('#')]
+                if color_values:
+                    return color_values
+        
+        # Fall back to active palette
+        return self.active_palette
+    
+    def _get_chart_type(self, chart_name: str) -> str:
+        """
+        Get configured chart type for a specific chart.
+        
+        Args:
+            chart_name: Name of chart in CHART_PREFERENCES
+            
+        Returns:
+            Chart type string
+        """
+        # Check for runtime preference override first
+        if chart_name in self.chart_preferences and 'type' in self.chart_preferences[chart_name]:
+            return self.chart_preferences[chart_name]['type']
+        
+        # Get default type from CHART_PREFERENCES
+        if chart_name in self.chart_preferences and 'default_type' in self.chart_preferences[chart_name]:
+            return self.chart_preferences[chart_name]['default_type']
+            
+        # Final fallback
+        return 'bar'
     
     def _convert_to_html(self, fig, custom_config=None):
         """
@@ -89,12 +172,8 @@ class ForensicsVisualizer:
         Returns:
             Plotly trace object
         """
-        # Get chart preferences
-        chart_config = self.chart_preferences.get(chart_name, {})
-        chart_colors = chart_config.get('colors', {})
-        
-        # Get color from preferences or fallback to default
-        color = chart_colors.get(color_key, self.colors.get(color_key, self.colors['primary']))
+        # Get color using new system
+        color = self._get_chart_color(chart_name, color_key, 0)
         
         if chart_type == 'line':
             return go.Scatter(
@@ -112,6 +191,27 @@ class ForensicsVisualizer:
                 x=x_data,
                 y=y_data,
                 marker=dict(color=color),
+                name=name,
+                hovertemplate=hovertemplate,
+                **kwargs
+            )
+        elif chart_type == 'area':
+            # Convert hex color to rgba for fill
+            if color.startswith('#'):
+                # Convert hex to rgb
+                hex_color = color.lstrip('#')
+                rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                fill_color = f'rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.3)'
+            else:
+                fill_color = color
+                
+            return go.Scatter(
+                x=x_data,
+                y=y_data,
+                mode='lines',
+                line=dict(color=color, width=2),
+                fill='tonexty',
+                fillcolor=fill_color,
                 name=name,
                 hovertemplate=hovertemplate,
                 **kwargs
@@ -137,7 +237,10 @@ class ForensicsVisualizer:
         Returns:
             Chart type string
         """
-        return self.chart_preferences.get(chart_name, {}).get('type', 'bar')
+        # Get default type from CHART_PREFERENCES
+        if chart_name in self.chart_preferences and 'default_type' in self.chart_preferences[chart_name]:
+            return self.chart_preferences[chart_name]['default_type']
+        return 'bar'
     
     def create_monthly_events_trend(self, monthly_data: Dict[str, Any]) -> str:
         """
@@ -164,6 +267,9 @@ class ForensicsVisualizer:
             # Get chart type from configuration
             chart_type = self._get_chart_type('monthly_events_trend')
             
+            # Get chart style configuration
+            chart_style = self.get_chart_style('monthly_events_trend', chart_type)
+            
             # Create trace based on configuration
             trace = self._create_trace_by_type(
                 chart_type=chart_type,
@@ -177,11 +283,61 @@ class ForensicsVisualizer:
             
             fig.add_trace(trace)
             
+            # Add trend line if enabled in chart style
+            if chart_style.get('show_trend', False) and len(events) > 1:
+                # Calculate linear trend
+                x_numeric = list(range(len(events)))
+                try:
+                    # Simple linear regression
+                    import numpy as np
+                    z = np.polyfit(x_numeric, events, 1)
+                    trend_line = np.poly1d(z)
+                    trend_values = [trend_line(x) for x in x_numeric]
+                    
+                    # Add trend line trace
+                    trend_trace = go.Scatter(
+                        x=month_labels,
+                        y=trend_values,
+                        mode='lines',
+                        name='Trend',
+                        line=dict(
+                            color='rgba(255, 107, 53, 0.8)',  # Orange trend line
+                            width=2,
+                            dash='dash'
+                        ),
+                        hovertemplate='<b>%{x}</b><br>Trend: %{y:,.0f}<extra></extra>'
+                    )
+                    fig.add_trace(trend_trace)
+                except ImportError:
+                    # Fallback if numpy is not available - simple moving average
+                    if len(events) >= 2:
+                        # Calculate simple moving average as trend
+                        trend_values = []
+                        for i in range(len(events)):
+                            if i == 0:
+                                trend_values.append(events[0])
+                            else:
+                                trend_values.append(sum(events[:i+1]) / (i+1))
+                        
+                        trend_trace = go.Scatter(
+                            x=month_labels,
+                            y=trend_values,
+                            mode='lines',
+                            name='Moving Average',
+                            line=dict(
+                                color='rgba(255, 107, 53, 0.8)',
+                                width=2,
+                                dash='dash'
+                            ),
+                            hovertemplate='<b>%{x}</b><br>Avg: %{y:,.0f}<extra></extra>'
+                        )
+                        fig.add_trace(trend_trace)
+            
             layout = self.base_layout.copy()
             layout.update({
                 'title': {
                     'text': 'Security Events Per Month',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {
@@ -270,7 +426,7 @@ class ForensicsVisualizer:
                     x=month_labels,
                     y=values,
                     name=attack_name,
-                    marker_color=self.chart_colors[i % len(self.chart_colors)],
+                    marker_color=self._get_chart_color('attack_types_stacked_bar', 'primary', i),
                     hovertemplate=f'<b>{attack_name}</b><br>%{{x}}<br>Events: %{{y:,}}<extra></extra>'
                 ))
             
@@ -278,7 +434,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': f'Top {top_n} Attack Types Per Month',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {'title': 'Month'},
@@ -412,7 +568,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': 'Attack Volume Trends Over Time',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'height': 1000,  # Increased height for 4 subplots
@@ -465,9 +621,13 @@ class ForensicsVisualizer:
             
             hours = list(range(24))
             
-            # Get colorscale from configuration
-            chart_config = self.chart_preferences.get('hourly_heatmap', {})
-            colorscale = chart_config.get('colorscale', 'Blues')
+            # Get colorscale from color assignments configuration
+            color_assignment_key = 'hourly_heatmap_colors'
+            colorscale = 'Blues'  # Default
+            if color_assignment_key in self.color_assignments:
+                chart_colors = self.color_assignments[color_assignment_key]
+                if isinstance(chart_colors, dict) and 'colorscale' in chart_colors:
+                    colorscale = chart_colors['colorscale']
             
             fig = go.Figure(data=go.Heatmap(
                 z=heatmap_data,
@@ -482,7 +642,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': 'Attack Intensity by Month and Hour of Day',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {
@@ -539,7 +699,10 @@ class ForensicsVisualizer:
             
             labels = [attack[0] for attack in top_attacks]
             values = [attack[1] for attack in top_attacks]
-            colors = self.chart_colors[:len(labels)]
+            colors = self._get_chart_colors_list('attack_type_distribution')[:len(labels)]
+            # If we need more colors than provided, extend with palette colors
+            if len(colors) < len(labels):
+                colors.extend(self.active_palette[len(colors):len(labels)])
             
             fig = go.Figure(data=[go.Pie(
                 labels=labels,
@@ -562,7 +725,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': 'Attack Type Distribution',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5,
                     'y': 0.95  # Keep title high
                 },
@@ -617,7 +780,7 @@ class ForensicsVisualizer:
                 x=counts,
                 y=ips,
                 orientation='h',
-                marker=dict(color=self.colors['primary']),
+                marker=dict(color=self._get_chart_color('top_source_ips', 'primary')),
                 hovertemplate='<b>%{y}</b><br>Events: %{x:,}<extra></extra>'
             )])
             
@@ -625,7 +788,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': f'Top {min(len(ips), top_n)} Source IP Addresses',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {'title': 'Number of Events'},
@@ -679,7 +842,7 @@ class ForensicsVisualizer:
             fig = go.Figure(data=[go.Bar(
                 x=protocol_names,
                 y=protocol_counts,
-                marker=dict(color=self.colors['secondary']),
+                marker=dict(color=self._get_chart_color('protocol_distribution', 'primary')),
                 hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
             )])
             
@@ -687,7 +850,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': 'Attack Distribution by Protocol',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {'title': 'Protocol'},
@@ -740,7 +903,7 @@ class ForensicsVisualizer:
                 x=dates,
                 y=counts,
                 mode='lines+markers',
-                line=dict(color=self.colors['primary'], width=2),
+                line=dict(color=self._get_chart_color('daily_timeline', 'primary'), width=2),
                 marker=dict(size=4),
                 fill='tonexty',
                 fillcolor=f'rgba(0, 63, 127, 0.1)',
@@ -751,7 +914,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': 'Daily Attack Events Timeline',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {
@@ -960,7 +1123,7 @@ class ForensicsVisualizer:
             xref="paper", yref="paper",
             text=message,
             showarrow=False,
-            font=dict(size=16, color=self.colors['dark']),
+            font=dict(size=16, color='#000000'),
             align="center"
         )
         
@@ -968,7 +1131,7 @@ class ForensicsVisualizer:
         layout.update({
             'title': {
                 'text': title,
-                'font': {'size': 18, 'color': self.colors['dark']},
+                'font': {'size': 18, 'color': '#000000'},
                 'x': 0.5
             },
             'xaxis': {'visible': False},
@@ -1173,40 +1336,83 @@ class ForensicsVisualizer:
         
         return month_names
 
-    def update_chart_preferences(self, chart_name: str, preferences: Dict[str, Any]) -> bool:
+    def get_chart_type(self, chart_name: str) -> str:
         """
-        Update chart preferences for a specific chart.
+        Get configured chart type for a specific chart.
         
         Args:
-            chart_name: Name of chart to update
-            preferences: Dictionary with new preferences
+            chart_name: Name of chart in CHART_PREFERENCES
             
         Returns:
-            True if update successful, False otherwise
+            Chart type string
         """
-        try:
-            if chart_name not in self.available_types:
-                logger.warning(f"Unknown chart name: {chart_name}")
-                return False
+        # Get default type from CHART_PREFERENCES
+        if chart_name in self.chart_preferences and 'default_type' in self.chart_preferences[chart_name]:
+            return self.chart_preferences[chart_name]['default_type']
+        return 'bar'
+    
+    def get_chart_color(self, chart_name: str, color_key: str = 'primary', fallback_index: int = 0) -> str:
+        """
+        Get color for a specific chart element.
+        
+        Args:
+            chart_name: Name of the chart (e.g., 'monthly_trends', 'attack_type')
+            color_key: Specific color key (e.g., 'primary', 'volume', 'packets')
+            fallback_index: Index in palette to use as fallback
             
-            # Validate chart type if provided
-            if 'type' in preferences:
-                chart_type = preferences['type']
-                if chart_type not in self.available_types[chart_name]:
-                    logger.warning(f"Invalid chart type '{chart_type}' for {chart_name}. Available: {self.available_types[chart_name]}")
-                    return False
+        Returns:
+            Color string (hex code)
+        """
+        return self._get_chart_color(chart_name, color_key, fallback_index)
+    
+    def get_chart_colors_list(self, chart_name: str) -> List[str]:
+        """
+        Get list of colors for a chart that needs multiple colors.
+        
+        Args:
+            chart_name: Name of the chart
             
-            # Update preferences
-            if chart_name not in self.chart_preferences:
-                self.chart_preferences[chart_name] = {}
+        Returns:
+            List of color strings
+        """
+        return self._get_chart_colors_list(chart_name)
+    
+    def get_active_color_palette(self) -> List[str]:
+        """
+        Get the currently active color palette.
+        
+        Returns:
+            List of color strings
+        """
+        return self.active_palette.copy()
+    
+    def get_chart_style(self, chart_name: str, chart_type: str = None) -> Dict[str, Any]:
+        """
+        Get style configuration for a specific chart.
+        
+        Args:
+            chart_name: Name of the chart
+            chart_type: Type of chart (if None, uses configured type)
             
-            self.chart_preferences[chart_name].update(preferences)
-            logger.info(f"Updated chart preferences for {chart_name}: {preferences}")
-            return True
+        Returns:
+            Dictionary with style configuration
+        """
+        if chart_type is None:
+            chart_type = self._get_chart_type(chart_name)
+        
+        # Check for chart-specific preferences first
+        if chart_name in self.chart_preferences:
+            chart_prefs = self.chart_preferences[chart_name]
+            if isinstance(chart_prefs, dict) and chart_type in chart_prefs:
+                return chart_prefs[chart_type]
+        
+        # Fall back to type-specific preferences (e.g., 'line_charts', 'bar_charts')
+        type_category = f"{chart_type}_charts"
+        if type_category in self.chart_preferences:
+            return self.chart_preferences[type_category]
             
-        except Exception as e:
-            logger.error(f"Failed to update chart preferences for {chart_name}: {e}")
-            return False
+        # Default empty dict if no configuration found
+        return {}
     
     def get_chart_preferences(self, chart_name: str = None) -> Dict[str, Any]:
         """
@@ -1252,7 +1458,7 @@ class ForensicsVisualizer:
             fig = go.Figure(data=[go.Bar(
                 x=attack_names,
                 y=converted_bps,
-                marker=dict(color=self.colors['primary']),
+                marker=dict(color=self._get_chart_color('top_attacks_max_bps', 'primary')),
                 hovertemplate=f'<b>%{{x}}</b><br>Max {bandwidth_config["unit_name"]}: %{{y:,.2f}}<extra></extra>'
             )])
             
@@ -1260,7 +1466,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': f'Top {top_n} Attacks by Maximum {bandwidth_config["unit_name"]}',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {'title': 'Attack Name'},
@@ -1315,7 +1521,7 @@ class ForensicsVisualizer:
             fig = go.Figure(data=[go.Bar(
                 x=attack_names,
                 y=max_pps_values,
-                marker=dict(color=self.colors['secondary']),
+                marker=dict(color=self._get_chart_color('top_attacks_max_pps', 'primary')),
                 hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
             )])
             
@@ -1323,7 +1529,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': f'Top {top_n} Attacks by Maximum PPS',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {'title': 'Attack Name'},
@@ -1380,7 +1586,10 @@ class ForensicsVisualizer:
             
             labels = [policy[0] for policy in top_policies]
             values = [policy[1] for policy in top_policies]
-            colors = self.chart_colors[:len(labels)]
+            colors = self._get_chart_colors_list('policy_distribution')[:len(labels)]
+            # If we need more colors than provided, extend with palette colors
+            if len(colors) < len(labels):
+                colors.extend(self.active_palette[len(colors):len(labels)])
             
             fig = go.Figure(data=[go.Pie(
                 labels=labels,
@@ -1403,7 +1612,7 @@ class ForensicsVisualizer:
             layout.update({
                 'title': {
                     'text': f'Security Events by Policy (Top {top_n})',
-                    'font': {'size': 18, 'color': self.colors['dark']},
+                    'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5,
                     'y': 0.95  # Keep title high
                 },
@@ -1437,9 +1646,17 @@ class ForensicsVisualizer:
         Returns:
             Dictionary with available chart types
         """
+        # Get available types based on CHART_PREFERENCES configuration
+        available_types = {}
+        for name, config in self.chart_preferences.items():
+            if isinstance(config, dict):
+                # Get all type keys except 'default_type'
+                types = [key for key in config.keys() if key != 'default_type']
+                available_types[name] = types
+        
         if chart_name:
-            return {chart_name: self.available_types.get(chart_name, [])}
-        return self.available_types.copy()
+            return {chart_name: available_types.get(chart_name, [])}
+        return available_types.copy()
     
     def reset_chart_preferences(self, chart_name: str = None) -> bool:
         """
@@ -1453,18 +1670,22 @@ class ForensicsVisualizer:
         """
         try:
             if chart_name:
-                if chart_name in CHART_PREFERENCES:
-                    self.chart_preferences[chart_name] = CHART_PREFERENCES[chart_name].copy()
-                    logger.info(f"Reset chart preferences for {chart_name}")
+                if chart_name in self.chart_preferences and 'default_type' in self.chart_preferences[chart_name]:
+                    # Reset to default chart type for this chart
+                    default_type = self.chart_preferences[chart_name]['default_type']
+                    self.chart_preferences[chart_name] = {'type': default_type}
+                    logger.info(f"Reset chart preferences for {chart_name} to type: {default_type}")
                 else:
-                    logger.warning(f"No default preferences found for {chart_name}")
+                    logger.warning(f"No chart configuration found for {chart_name}")
                     return False
             else:
-                # Reset all preferences
+                # Reset all preferences to default types
+                original_prefs = self.chart_preferences.copy()
                 self.chart_preferences = {}
-                for name, prefs in CHART_PREFERENCES.items():
-                    self.chart_preferences[name] = prefs.copy()
-                logger.info("Reset all chart preferences to defaults")
+                for name, config in original_prefs.items():
+                    if 'default_type' in config:
+                        self.chart_preferences[name] = {'type': config['default_type']}
+                logger.info("Reset all chart preferences to default types")
             
             return True
             
