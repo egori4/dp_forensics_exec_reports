@@ -326,6 +326,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Change/Fixes/Features                                                                      |
 |---------|--------------------------------------------------------------------------------------------|
+| v2.0.2  | - 10/24/25 - Fixed CHART_PREFERENCES variables |
 | v2.0.1  | - 10/24/25 - Major UX Enhancement: Added user-configurable control for chart types, layouts, and colors. Improved config.py architecture for intuitive customization. Introduced color palettes with individual chart override support if needed. Updated documentation with customization examples. |
 | v2.0.0  | - 10/23/25 - Added new charts: 1.Top 5 attacks by Gbps 2. Top 5 attacks by PPS 3. Security Events by Policy  |
 | v1.1.9  | - 10/21/25 - Enhanced identification of the first complete month(challenge with Packet Anomalies unfiltered) |

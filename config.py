@@ -145,7 +145,8 @@ CHART_PREFERENCES = {
         'bar': {
             'show_values': True,  # Show values on bars
             'show_trend': True,   # Show trend line for bar charts too
-            'bar_width': 0.6
+            'bar_width': 0.6,
+            'values_text_size': 12  # Font size for values displayed on bars
         },
         'area': {
             'fill': 'tonexty',
@@ -153,7 +154,28 @@ CHART_PREFERENCES = {
             'show_trend': True
         }
     },
-    
+
+    # Top attack types per month (stacked visualization)
+    'attack_types_monthly': {
+        'default_type': 'stacked_area',  # Options: 'stacked_bar', 'stacked_area', 'line'
+        'top_n': 5,  # Number of top attack types to display
+        'stacked_bar': {
+            'bar_width': 0.8,
+            'show_values': True,  # Values on stacked bars can be cluttered
+            'values_text_size': 12  # Font size if show_values is enabled
+        },
+        'stacked_area': {
+            'line_width': 2,
+            'fill': 'tonexty', # options : 'tozeroy', 'tonexty'
+            'opacity': 0.7  # Transparency for overlapping areas
+        },
+        'line': {
+            'mode': 'lines+markers',
+            'line_width': 2,
+            'marker_size': 6
+        }
+    },
+
     # Attack volume trends (4 subplots)
     'attack_volume_trends': {
         'default_type': 'bar',  # Options: 'line', 'bar'
@@ -161,12 +183,13 @@ CHART_PREFERENCES = {
             'mode': 'lines+markers',
             'line_width': 2,
             'marker_size': 6,
-            'show_trend': False  # No trend for multi-subplot charts
+            'show_trend': True  # Show trend lines on all 4 subplots
         },
         'bar': {
-            'show_values': False,  # Too cluttered with 4 subplots
-            'show_trend': False,
-            'bar_width': 0.7
+            'bar_width': 0.7,
+            'show_values': True,  # Too cluttered with 4 subplots
+            'values_text_size': 12,  # Font size for values displayed on bars
+            'show_trend': False,  # Show trend lines on all 4 subplots
         }
     },
     
@@ -174,53 +197,35 @@ CHART_PREFERENCES = {
     'attack_type_distribution': {
         'default_type': 'pie',  # Options: 'pie', 'donut', 'bar', 'horizontal_bar'
         'pie': {
-            'hole': 0,  # Full pie
-            'textinfo': 'label+percent',
-            'textposition': 'outside'
+            'hole': 0.0,  # Options: 0.0 (full pie) to 0.9 (ring)
+            'textinfo': 'label+percent', # Options: 'label+percent', 'percent', 'label', 'value', 'label+value'
+            'textposition': 'outside' # Options: 'inside', 'outside'
         },
         'donut': {
             'hole': 0.4,  # Donut hole size
-            'textinfo': 'label+percent', 
+            'textinfo': 'label+percent', # Options: 'label+percent', 'percent', 'label', 'value', 'label+value'
             'textposition': 'outside'
         },
         'bar': {
-            'orientation': 'vertical',
             'show_values': True,
-            'sort_values': 'descending'
+            'sort_values': 'descending', # Options: 'ascending', 'descending'
+            'values_text_size': 12  # Font size for values displayed on bars
         }
     },
     
-    # Policy distribution (same options as attack type)
-    'policy_distribution': {
-        'default_type': 'pie',  # Options: 'pie', 'donut', 'bar', 'horizontal_bar'
-        'pie': {
-            'hole': 0,
-            'textinfo': 'label+percent',
-            'textposition': 'outside'
-        },
-        'donut': {
-            'hole': 0.4,
-            'textinfo': 'label+percent',
-            'textposition': 'outside'
-        },
-        'bar': {
-            'orientation': 'vertical', 
-            'show_values': True,
-            'sort_values': 'descending'
-        }
-    },
+
     
     # Ranking charts (source IPs, protocols, top attacks)
     'top_source_ips': {
         'default_type': 'horizontal_bar',  # Options: 'bar', 'horizontal_bar'
-        'horizontal_bar': {
-            'orientation': 'horizontal',
-            'show_values': True,
-            'sort_values': 'descending'
-        },
         'bar': {
-            'orientation': 'vertical',
             'show_values': True,
+            'values_text_size': 12,  # Font size for values displayed on bars
+            'sort_values': 'descending',
+        },
+        'horizontal_bar': {
+            'show_values': True,
+            'values_text_size': 12,  # Font size for values displayed on bars
             'sort_values': 'descending'
         }
     },
@@ -228,76 +233,118 @@ CHART_PREFERENCES = {
     'protocol_distribution': {
         'default_type': 'bar',  # Options: 'bar', 'horizontal_bar'
         'bar': {
-            'orientation': 'vertical',
             'show_values': True, 
+            'values_text_size': 12,  # Font size for values displayed on bars
             'sort_values': 'descending'
         },
         'horizontal_bar': {
-            'orientation': 'horizontal',
             'show_values': True,
+            'values_text_size': 12,  # Font size for values displayed on bars
             'sort_values': 'descending'
         }
     },
-    
+
+    # Timeline chart
+    'daily_timeline': {
+        'default_type': 'area',  # Options: 'line', 'area'
+        'line': {
+            'mode': 'lines+markers', # Options: 'lines', 'markers', 'lines+markers'
+            'line_width': 2,
+            'marker_size': 4
+        },
+        'area': {
+            'line_width': 2,
+            'marker_size': 4,
+            'mode': 'lines+markers'
+        }
+    },
+ 
     'top_attacks_max_bps': {
         'default_type': 'bar',  # Options: 'bar', 'horizontal_bar'
         'bar': {
-            'orientation': 'vertical',
             'show_values': True,
+            'values_text_size': 12,  # Font size for values displayed on bars
             'sort_values': 'descending'
         },
         'horizontal_bar': {
-            'orientation': 'horizontal', 
             'show_values': True,
-            'sort_values': 'descending'
+            'sort_values': 'descending',
+            'values_text_size': 12  # Font size for values displayed on bars
         }
     },
     
     'top_attacks_max_pps': {
         'default_type': 'bar',  # Options: 'bar', 'horizontal_bar'
         'bar': {
-            'orientation': 'vertical',
             'show_values': True,
-            'sort_values': 'descending'
+            'sort_values': 'descending',
+            'values_text_size': 12  # Font size for values displayed on bars
         },
         'horizontal_bar': {
-            'orientation': 'horizontal',
             'show_values': True, 
-            'sort_values': 'descending'
+            'sort_values': 'descending',
+            'values_text_size': 12  # Font size for values displayed on bars
         }
     },
     
-    # Heatmap
-    'hourly_heatmap': {
-        'default_type': 'heatmap',  # Only one option
-        'heatmap': {
-            'colorscale': 'Blues'  # Options: 'Blues', 'Reds', 'Viridis', 'Plasma'
-        }
-    },
+
     
-    # Timeline chart
-    'daily_timeline': {
-        'default_type': 'line',  # Options: 'line', 'area', 'bar'
-        'line': {
-            'mode': 'lines+markers',
-            'line_width': 2,
-            'marker_size': 4,
-            'fill': 'tonexty',
-            'show_trend': False  # Timeline doesn't need trend
+    # Policy distribution (same options as attack type)
+    'policy_distribution': {
+        'default_type': 'pie',  # Options: 'pie', 'donut', 'bar', 'horizontal_bar'
+        'pie': {
+            'hole': 0.0, # Options: 0.0 (full pie) to 0.9 (ring)
+            'textinfo': 'label+percent', # Options: 'label+percent', 'percent', 'label', 'value', 'label+value'
+            'textposition': 'outside'
         },
-        'area': {
-            'fill': 'tonexty',
-            'line_width': 2,
-            'show_trend': False
+        'donut': {
+            'hole': 0.4,
+            'textinfo': 'label+percent', # Options: 'label+percent', 'percent', 'label', 'value', 'label+value'
+            'textposition': 'outside'
+        },
+        'bar': {
+            'show_values': True,
+            'sort_values': 'descending',
+            'values_text_size': 12  # Font size for values displayed on bars
         }
     }
+
 }
+
+
 
 # Chart rendering configuration
 CHART_CONFIG = {
-    'displayModeBar': False,
-    'responsive': True
+    'displayModeBar': False, # Hide the mode bar (toolbar) by default
+    'responsive': True # Make charts responsive to container size
 }
+
+"""
+CHART_LAYOUT configuration for Plotly chart rendering.
+This dictionary defines the default layout settings for all charts generated by the report generator.
+Each key controls a specific aspect of chart appearance and behavior.
+Keys and their options:
+- 'font': Dict specifying font family for all chart text.
+    Example: {'family': 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif'}
+- 'plot_bgcolor': Background color of the plotting area (inside axes).
+    Example: 'white'
+- 'paper_bgcolor': Background color of the entire chart (outside axes).
+    Example: 'white'
+- 'margin': Dict specifying margins (in pixels) around the chart.
+    Keys: 'l' (left), 'r' (right), 't' (top), 'b' (bottom)
+    Example: {'l': 60, 'r': 60, 't': 80, 'b': 80}
+- 'showlegend': Boolean to show/hide the legend.
+    Example: True
+- 'legend': Dict configuring legend appearance and position.
+    - 'orientation': 'h' for horizontal, 'v' for vertical legend layout.
+    - 'yanchor': Vertical anchor point for legend ('top', 'middle', 'bottom').
+    - 'y': Vertical position (float, 0 = bottom, 1 = top, can be negative for below chart).
+    - 'xanchor': Horizontal anchor point for legend ('left', 'center', 'right').
+    - 'x': Horizontal position (float, 0 = left, 1 = right, 0.5 = center).
+    Example:
+        {
+These settings ensure a consistent, professional appearance for all charts and can be customized as needed.
+"""
 
 CHART_LAYOUT = {
     'font': {'family': 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif'},

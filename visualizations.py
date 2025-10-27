@@ -175,27 +175,54 @@ class ForensicsVisualizer:
         # Get color using new system
         color = self._get_chart_color(chart_name, color_key, 0)
         
+        # Get chart style configuration
+        chart_style = self.get_chart_style(chart_name, chart_type)
+        
         if chart_type == 'line':
+            # Get line-specific styling from configuration
+            line_width = chart_style.get('line_width', 3)
+            marker_size = chart_style.get('marker_size', 8)
+            mode = chart_style.get('mode', 'lines+markers')
+            
             return go.Scatter(
                 x=x_data,
                 y=y_data,
-                mode='lines+markers',
-                line=dict(color=color, width=3),
-                marker=dict(size=8, color=color),
+                mode=mode,
+                line=dict(color=color, width=line_width),
+                marker=dict(size=marker_size, color=color),
                 name=name,
                 hovertemplate=hovertemplate,
                 **kwargs
             )
         elif chart_type == 'bar':
-            return go.Bar(
+            # Get bar-specific styling from configuration
+            bar_width = chart_style.get('bar_width', None)
+            show_values = chart_style.get('show_values', False)
+            values_text_size = chart_style.get('values_text_size', 10)  # Default to 10 if not specified
+            
+            # Build bar trace
+            bar_trace = go.Bar(
                 x=x_data,
                 y=y_data,
                 marker=dict(color=color),
                 name=name,
                 hovertemplate=hovertemplate,
+                width=bar_width,  # Will be None if not specified, which is fine
                 **kwargs
             )
+            
+            # Add text on bars if show_values is enabled
+            if show_values:
+                bar_trace.text = [f'{val:,.0f}' if isinstance(val, (int, float)) else str(val) for val in y_data]
+                bar_trace.textposition = 'outside'
+                bar_trace.textfont = dict(size=values_text_size)  # Use configured text size
+            
+            return bar_trace
+            
         elif chart_type == 'area':
+            # Get area-specific styling from configuration
+            line_width = chart_style.get('line_width', 2)
+            
             # Convert hex color to rgba for fill
             if color.startswith('#'):
                 # Convert hex to rgb
@@ -209,7 +236,7 @@ class ForensicsVisualizer:
                 x=x_data,
                 y=y_data,
                 mode='lines',
-                line=dict(color=color, width=2),
+                line=dict(color=color, width=line_width),
                 fill='tonexty',
                 fillcolor=fill_color,
                 name=name,
@@ -226,6 +253,28 @@ class ForensicsVisualizer:
                 hovertemplate=hovertemplate,
                 **kwargs
             )
+    
+    def _add_bar_chart_margin(self, fig, y_data, chart_type: str = 'bar', show_values: bool = False):
+        """
+        Add top margin to y-axis for bar charts with outside text to prevent cutoff.
+        
+        Args:
+            fig: Plotly figure object
+            y_data: Y-axis data (list or single value)
+            chart_type: Type of chart
+            show_values: Whether values are shown outside bars
+        """
+        # Only add margin for bar charts with outside text
+        if chart_type == 'bar' and show_values:
+            # Handle both list and single value
+            if isinstance(y_data, (list, tuple)):
+                max_val = max(y_data) if y_data else 0
+            else:
+                max_val = y_data
+            
+            # Add 15% margin at the top
+            if max_val > 0:
+                fig.update_yaxes(range=[0, max_val * 1.15])
     
     def _get_chart_type(self, chart_name: str) -> str:
         """
@@ -333,6 +382,10 @@ class ForensicsVisualizer:
                         )
                         fig.add_trace(trend_trace)
             
+            # Add margin for bar charts with outside text
+            show_values = chart_style.get('show_values', False)
+            self._add_bar_chart_margin(fig, events, chart_type, show_values)
+            
             layout = self.base_layout.copy()
             layout.update({
                 'title': {
@@ -374,18 +427,27 @@ class ForensicsVisualizer:
             logger.error(f"Failed to create monthly events trend: {e}")
             return self._create_error_chart("Monthly Events Trend", str(e))
     
-    def create_attack_types_stacked_bar(self, monthly_data: Dict[str, Any], top_n: int = 5) -> str:
+    def create_attack_types_stacked_bar(self, monthly_data: Dict[str, Any], top_n: int = None) -> str:
         """
-        Create a stacked bar chart showing top attack types per month.
+        Create a chart showing top attack types per month.
+        Supports multiple visualization types: stacked bar, stacked area, or lines.
         
         Args:
             monthly_data: Dictionary with monthly statistics
-            top_n: Number of top attack types to show
+            top_n: Number of top attack types to show (None = use config default)
             
         Returns:
             HTML string of the chart
         """
         try:
+            # Get chart configuration
+            chart_type = self.get_chart_type('attack_types_monthly')
+            chart_style = self.get_chart_style('attack_types_monthly', chart_type)
+            
+            # Get top_n from config if not specified
+            if top_n is None:
+                top_n = self.chart_preferences.get('attack_types_monthly', {}).get('top_n', 5)
+            
             if not monthly_data.get('has_trends', False):
                 return self._create_no_data_chart("Top Attack Types Per Month", monthly_data.get('reason', 'No data available'))
             
@@ -407,9 +469,12 @@ class ForensicsVisualizer:
             top_attacks = sorted(all_attacks.items(), key=lambda x: x[1], reverse=True)[:top_n]
             top_attack_names = [attack[0] for attack in top_attacks]
             
+            # Get colors for attack types
+            colors = self._get_chart_colors_list('attack_types_stacked_bar')
+            
             fig = go.Figure()
             
-            # Add trace for each attack type
+            # Create traces based on chart type
             for i, attack_name in enumerate(top_attack_names):
                 values = []
                 for month in months:
@@ -422,46 +487,122 @@ class ForensicsVisualizer:
                         count = attack_info
                     values.append(count)
                 
-                fig.add_trace(go.Bar(
-                    x=month_labels,
-                    y=values,
-                    name=attack_name,
-                    marker_color=self._get_chart_color('attack_types_stacked_bar', 'primary', i),
-                    hovertemplate=f'<b>{attack_name}</b><br>%{{x}}<br>Events: %{{y:,}}<extra></extra>'
-                ))
+                color = colors[i % len(colors)]
+                
+                if chart_type == 'stacked_area':
+                    # Stacked area chart
+                    line_width = chart_style.get('line_width', 1)
+                    opacity = chart_style.get('opacity', 0.7)
+                    
+                    # Convert hex color to rgba for fill
+                    if color.startswith('#'):
+                        hex_color = color.lstrip('#')
+                        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                        fill_color = f'rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {opacity})'
+                    else:
+                        fill_color = color
+                    
+                    fig.add_trace(go.Scatter(
+                        x=month_labels,
+                        y=values,
+                        name=attack_name,
+                        mode='lines',
+                        line=dict(color=color, width=line_width),
+                        fill='tonexty',
+                        fillcolor=fill_color,
+                        stackgroup='one',  # Enable stacking
+                        hovertemplate=f'<b>{attack_name}</b><br>%{{x}}<br>Events: %{{y:,}}<extra></extra>'
+                    ))
+                    
+                elif chart_type == 'line':
+                    # Line chart - individual trends
+                    mode = chart_style.get('mode', 'lines+markers')
+                    line_width = chart_style.get('line_width', 2)
+                    marker_size = chart_style.get('marker_size', 6)
+                    
+                    fig.add_trace(go.Scatter(
+                        x=month_labels,
+                        y=values,
+                        name=attack_name,
+                        mode=mode,
+                        line=dict(color=color, width=line_width),
+                        marker=dict(size=marker_size, color=color),
+                        hovertemplate=f'<b>{attack_name}</b><br>%{{x}}<br>Events: %{{y:,}}<extra></extra>'
+                    ))
+                    
+                else:  # Default to stacked_bar
+                    # Stacked bar chart
+                    bar_width = chart_style.get('bar_width', 0.8)
+                    show_values = chart_style.get('show_values', False)
+                    
+                    bar_trace = go.Bar(
+                        x=month_labels,
+                        y=values,
+                        name=attack_name,
+                        marker_color=color,
+                        width=bar_width,
+                        hovertemplate=f'<b>{attack_name}</b><br>%{{x}}<br>Events: %{{y:,}}<extra></extra>'
+                    )
+                    
+                    # Add text on bars if show_values is enabled
+                    if show_values:
+                        values_text_size = chart_style.get('values_text_size', 10)
+                        # Only show value if segment is large enough (more than 5% of max value or > 50)
+                        max_value = max(values) if values else 0
+                        threshold = max(max_value * 0.05, 50)  # 5% of max or 50, whichever is larger
+                        bar_trace.text = [f'{val:,}' if val >= threshold else '' for val in values]
+                        bar_trace.textposition = 'inside'  # Position in the middle of the bar segment
+                        bar_trace.textfont = dict(size=values_text_size, color='white')
+                        bar_trace.insidetextanchor = 'middle'  # Center text within bar segment
+                        bar_trace.textangle = 0  # Prevent text rotation - keep horizontal or hide if no room
+                        bar_trace.constraintext = 'none'  # Don't constrain or rotate text, hide if no room
+                    
+                    fig.add_trace(bar_trace)
             
             layout = self.base_layout.copy()
+            
+            # Determine chart title based on type
+            if chart_type == 'stacked_area':
+                chart_title = f'Top {top_n} Attack Types Per Month (Stacked Area)'
+            elif chart_type == 'line':
+                chart_title = f'Top {top_n} Attack Types Per Month (Trends)'
+            else:
+                chart_title = f'Top {top_n} Attack Types Per Month'
+            
             layout.update({
                 'title': {
-                    'text': f'Top {top_n} Attack Types Per Month',
+                    'text': chart_title,
                     'font': {'size': 18, 'color': '#000000'},
                     'x': 0.5
                 },
                 'xaxis': {'title': 'Month'},
                 'yaxis': {'title': 'Number of Events'},
-                'barmode': 'stack',
                 'hovermode': 'x unified',
                 'height': 500
             })
             
+            # Set barmode for bar charts
+            if chart_type == 'stacked_bar':
+                layout['barmode'] = 'stack'
+            
             fig.update_layout(layout)
             
-            # Disable zoom on axes for bar charts
+            # Disable zoom on axes
             fig.update_xaxes(fixedrange=True)
             fig.update_yaxes(fixedrange=True)
             
-            # Bar chart config - disable all zoom
-            bar_config = {
+            # Chart config - disable all zoom
+            chart_config = {
                 'displayModeBar': False,
                 'responsive': True,
                 'scrollZoom': False,
                 'doubleClick': False
             }
             
-            return self._convert_to_html(fig, bar_config)
+            return self._convert_to_html(fig, chart_config)
             
         except Exception as e:
-            logger.error(f"Failed to create attack types stacked bar: {e}")
+            logger.error(f"Failed to create attack types chart: {e}")
             return self._create_error_chart("Attack Types Per Month", str(e))
     
     def create_attack_volume_trends(self, monthly_data: Dict[str, Any]) -> str:
@@ -512,8 +653,15 @@ class ForensicsVisualizer:
                 vertical_spacing=0.06
             )
             
-            # Get chart type from configuration
+            # Get chart type and style from configuration
             chart_type = self._get_chart_type('attack_volume_trends')
+            chart_style = self.get_chart_style('attack_volume_trends')
+            
+            # Check if trend lines should be shown
+            show_trend = chart_style.get('show_trend', False)
+            
+            # Create numeric x values for trend calculations
+            x_numeric = list(range(len(month_labels)))
             
             # Total Volume in configured unit (Row 1)
             volume_trace = self._create_trace_by_type(
@@ -527,6 +675,40 @@ class ForensicsVisualizer:
             )
             fig.add_trace(volume_trace, row=1, col=1)
             
+            # Add trend line for volume if enabled
+            if show_trend and len(month_labels) > 1:
+                try:
+                    import numpy as np
+                    # Linear regression
+                    z = np.polyfit(x_numeric, total_volume, 1)
+                    trend_line = np.poly1d(z)
+                    trend_values = [trend_line(x) for x in x_numeric]
+                    
+                    trend_trace = go.Scatter(
+                        x=month_labels,
+                        y=trend_values,
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                        hovertemplate='<b>%{x}</b><br>Trend: %{y:,.2f}<extra></extra>'
+                    )
+                    fig.add_trace(trend_trace, row=1, col=1)
+                except ImportError:
+                    # Fallback to simple moving average
+                    if len(total_volume) >= 3:
+                        trend_values = [sum(total_volume[max(0, i-1):min(len(total_volume), i+2)]) / 
+                                      len(total_volume[max(0, i-1):min(len(total_volume), i+2)]) 
+                                      for i in range(len(total_volume))]
+                        trend_trace = go.Scatter(
+                            x=month_labels,
+                            y=trend_values,
+                            mode='lines',
+                            name='Trend',
+                            line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                            hovertemplate='<b>%{x}</b><br>Trend: %{y:,.2f}<extra></extra>'
+                        )
+                        fig.add_trace(trend_trace, row=1, col=1)
+            
             # Total Packets in configured unit (Row 2) 
             packets_trace = self._create_trace_by_type(
                 chart_type=chart_type,
@@ -538,6 +720,38 @@ class ForensicsVisualizer:
                 hovertemplate=f'<b>%{{x}}</b><br>Packets {packet_config["display_name"]}: %{{y:,.2f}}<extra></extra>'
             )
             fig.add_trace(packets_trace, row=2, col=1)
+            
+            # Add trend line for packets if enabled
+            if show_trend and len(month_labels) > 1:
+                try:
+                    import numpy as np
+                    z = np.polyfit(x_numeric, converted_packets, 1)
+                    trend_line = np.poly1d(z)
+                    trend_values = [trend_line(x) for x in x_numeric]
+                    
+                    trend_trace = go.Scatter(
+                        x=month_labels,
+                        y=trend_values,
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                        hovertemplate=f'<b>%{{x}}</b><br>Trend: %{{y:,.2f}}<extra></extra>'
+                    )
+                    fig.add_trace(trend_trace, row=2, col=1)
+                except ImportError:
+                    if len(converted_packets) >= 3:
+                        trend_values = [sum(converted_packets[max(0, i-1):min(len(converted_packets), i+2)]) / 
+                                      len(converted_packets[max(0, i-1):min(len(converted_packets), i+2)]) 
+                                      for i in range(len(converted_packets))]
+                        trend_trace = go.Scatter(
+                            x=month_labels,
+                            y=trend_values,
+                            mode='lines',
+                            name='Trend',
+                            line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                            hovertemplate=f'<b>%{{x}}</b><br>Trend: %{{y:,.2f}}<extra></extra>'
+                        )
+                        fig.add_trace(trend_trace, row=2, col=1)
             
             # Max PPS (Row 3)
             pps_trace = self._create_trace_by_type(
@@ -551,6 +765,38 @@ class ForensicsVisualizer:
             )
             fig.add_trace(pps_trace, row=3, col=1)
             
+            # Add trend line for PPS if enabled
+            if show_trend and len(month_labels) > 1:
+                try:
+                    import numpy as np
+                    z = np.polyfit(x_numeric, max_pps, 1)
+                    trend_line = np.poly1d(z)
+                    trend_values = [trend_line(x) for x in x_numeric]
+                    
+                    trend_trace = go.Scatter(
+                        x=month_labels,
+                        y=trend_values,
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                        hovertemplate='<b>%{x}</b><br>Trend: %{y:,.0f}<extra></extra>'
+                    )
+                    fig.add_trace(trend_trace, row=3, col=1)
+                except ImportError:
+                    if len(max_pps) >= 3:
+                        trend_values = [sum(max_pps[max(0, i-1):min(len(max_pps), i+2)]) / 
+                                      len(max_pps[max(0, i-1):min(len(max_pps), i+2)]) 
+                                      for i in range(len(max_pps))]
+                        trend_trace = go.Scatter(
+                            x=month_labels,
+                            y=trend_values,
+                            mode='lines',
+                            name='Trend',
+                            line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                            hovertemplate='<b>%{x}</b><br>Trend: %{y:,.0f}<extra></extra>'
+                        )
+                        fig.add_trace(trend_trace, row=3, col=1)
+            
             # Max bandwidth (Row 4)
             bandwidth_trace = self._create_trace_by_type(
                 chart_type=chart_type,
@@ -563,6 +809,57 @@ class ForensicsVisualizer:
             )
             fig.add_trace(bandwidth_trace, row=4, col=1)
             
+            # Add trend line for bandwidth if enabled
+            if show_trend and len(month_labels) > 1:
+                try:
+                    import numpy as np
+                    z = np.polyfit(x_numeric, max_bandwidth_values, 1)
+                    trend_line = np.poly1d(z)
+                    trend_values = [trend_line(x) for x in x_numeric]
+                    
+                    trend_trace = go.Scatter(
+                        x=month_labels,
+                        y=trend_values,
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                        hovertemplate=bandwidth_config['hover_template'].replace('Max ', 'Trend: ')
+                    )
+                    fig.add_trace(trend_trace, row=4, col=1)
+                except ImportError:
+                    if len(max_bandwidth_values) >= 3:
+                        trend_values = [sum(max_bandwidth_values[max(0, i-1):min(len(max_bandwidth_values), i+2)]) / 
+                                      len(max_bandwidth_values[max(0, i-1):min(len(max_bandwidth_values), i+2)]) 
+                                      for i in range(len(max_bandwidth_values))]
+                        trend_trace = go.Scatter(
+                            x=month_labels,
+                            y=trend_values,
+                            mode='lines',
+                            name='Trend',
+                            line=dict(color='rgba(255, 107, 53, 0.8)', width=2, dash='dash'),
+                            hovertemplate=bandwidth_config['hover_template'].replace('Max ', 'Trend: ')
+                        )
+                        fig.add_trace(trend_trace, row=4, col=1)
+            
+            # Add margin for bar charts with outside text positioning
+            show_values = chart_style.get('show_values', False)
+            if chart_type == 'bar' and show_values:
+                # Calculate max values for each subplot and add 15% margin
+                max_volume = max(total_volume) if total_volume else 0
+                max_packets = max(converted_packets) if converted_packets else 0
+                max_pps_val = max(max_pps) if max_pps else 0
+                max_bandwidth = max(max_bandwidth_values) if max_bandwidth_values else 0
+                
+                # Update each subplot's y-axis range with margin
+                if max_volume > 0:
+                    fig.update_yaxes(range=[0, max_volume * 1.15], row=1, col=1)
+                if max_packets > 0:
+                    fig.update_yaxes(range=[0, max_packets * 1.15], row=2, col=1)
+                if max_pps_val > 0:
+                    fig.update_yaxes(range=[0, max_pps_val * 1.15], row=3, col=1)
+                if max_bandwidth > 0:
+                    fig.update_yaxes(range=[0, max_bandwidth * 1.15], row=4, col=1)
+            
             # Update layout to match monthly events styling
             layout = self.base_layout.copy()
             layout.update({
@@ -573,6 +870,14 @@ class ForensicsVisualizer:
                 },
                 'height': 1000,  # Increased height for 4 subplots
                 'showlegend': False,
+                'legend': {
+                    'orientation': 'h',
+                    'yanchor': 'bottom',
+                    'y': -0.08,
+                    'xanchor': 'center',
+                    'x': 0.5,
+                    'font': {'size': 11}
+                },
                 'hovermode': 'x unified'
             })
             
@@ -664,7 +969,7 @@ class ForensicsVisualizer:
     
     def create_attack_type_pie_chart(self, holistic_data: Dict[str, Any], top_n: int = 10) -> str:
         """
-        Create a pie chart showing attack type distribution.
+        Create a chart showing attack type distribution (pie, donut, bar, or horizontal bar).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -689,7 +994,15 @@ class ForensicsVisualizer:
                     count = attack_info
                 attack_counts[attack] = count
             
-            sorted_attacks = sorted(attack_counts.items(), key=lambda x: x[1], reverse=True)
+            # Get chart type and style configuration first to check sort order
+            chart_type = self._get_chart_type('attack_type_distribution')
+            chart_style = self.get_chart_style('attack_type_distribution', chart_type)
+            
+            # Apply sort order from configuration
+            sort_order = chart_style.get('sort_values', 'descending')
+            reverse_sort = (sort_order == 'descending')
+            
+            sorted_attacks = sorted(attack_counts.items(), key=lambda x: x[1], reverse=reverse_sort)
             top_attacks = sorted_attacks[:top_n]
             
             # Group remaining attacks as "Others"
@@ -704,46 +1017,158 @@ class ForensicsVisualizer:
             if len(colors) < len(labels):
                 colors.extend(self.active_palette[len(colors):len(labels)])
             
-            fig = go.Figure(data=[go.Pie(
-                labels=labels,
-                values=values,
-                hole=0.4,  # Larger hole to make pie smaller
-                marker=dict(colors=colors),
-                textposition='outside',
-                texttemplate='%{label}, %{percent}',  # Single line with comma separation
-                textfont=dict(size=11),  # Smaller text to fit better
-                hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
-                # Improved text positioning for better visibility
-                textinfo='label+percent',
-                # Prevent text overlap by using pull for small slices
-                pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
-                # Move the pie chart further left to avoid title overlap
-                domain={'x': [0.0, 0.55], 'y': [0.1, 0.9]}  # Move pie chart further left
-            )])
+            # Handle bar charts
+            if chart_type in ['bar', 'horizontal_bar']:
+                orientation = chart_style.get('orientation', 'vertical')
+                show_values = chart_style.get('show_values', True)
+                values_text_size = chart_style.get('values_text_size', 11)
+                
+                if orientation == 'horizontal':
+                    # Horizontal bar chart - reverse order so top value is at top
+                    labels_reversed = list(reversed(labels))
+                    values_reversed = list(reversed(values))
+                    colors_reversed = list(reversed(colors))
+                    
+                    bar_trace = go.Bar(
+                        x=values_reversed,
+                        y=labels_reversed,
+                        orientation='h',
+                        marker=dict(color=colors_reversed),
+                        hovertemplate='<b>%{y}</b><br>Events: %{x:,}<extra></extra>'
+                    )
+                    
+                    if show_values:
+                        bar_trace.text = [f'{val:,}' for val in values_reversed]
+                        bar_trace.textposition = 'outside'
+                        bar_trace.textfont = dict(size=values_text_size)
+                    
+                    fig = go.Figure(data=[bar_trace])
+                    
+                    layout = self.base_layout.copy()
+                    layout.update({
+                        'title': {
+                            'text': 'Attack Type Distribution',
+                            'font': {'size': 18, 'color': '#000000'},
+                            'x': 0.5
+                        },
+                        'xaxis': {'title': 'Number of Events'},
+                        'yaxis': {'title': 'Attack Type'},
+                        'showlegend': False,
+                        'height': max(400, len(labels) * 40)  # Dynamic height based on number of items
+                    })
+                    
+                    fig.update_layout(layout)
+                    fig.update_xaxes(fixedrange=True)
+                    fig.update_yaxes(fixedrange=True)
+                    
+                else:
+                    # Vertical bar chart
+                    bar_trace = go.Bar(
+                        x=labels,
+                        y=values,
+                        marker=dict(color=colors),
+                        hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
+                    )
+                    
+                    if show_values:
+                        bar_trace.text = [f'{val:,}' for val in values]
+                        bar_trace.textposition = 'outside'
+                        bar_trace.textfont = dict(size=values_text_size)
+                    
+                    fig = go.Figure(data=[bar_trace])
+                    
+                    # Add margin for bar charts with outside text
+                    max_value = max(values) if values else 0
+                    
+                    layout = self.base_layout.copy()
+                    layout.update({
+                        'title': {
+                            'text': 'Attack Type Distribution',
+                            'font': {'size': 18, 'color': '#000000'},
+                            'x': 0.5
+                        },
+                        'xaxis': {'title': 'Attack Type'},
+                        'yaxis': {
+                            'title': 'Number of Events',
+                            'range': [0, max_value * 1.15] if show_values and max_value > 0 else None
+                        },
+                        'showlegend': False,
+                        'height': 500
+                    })
+                    
+                    fig.update_layout(layout)
+                    fig.update_xaxes(fixedrange=True)
+                    fig.update_yaxes(fixedrange=True)
+                
+                bar_config = {
+                    'displayModeBar': False,
+                    'responsive': True,
+                    'scrollZoom': False,
+                    'doubleClick': False
+                }
+                
+                return self._convert_to_html(fig, bar_config)
             
-            layout = self.base_layout.copy()
-            layout.update({
-                'title': {
-                    'text': 'Attack Type Distribution',
-                    'font': {'size': 18, 'color': '#000000'},
-                    'x': 0.5,
-                    'y': 0.95  # Keep title high
-                },
-                'showlegend': True,
-                'legend': {
-                    'orientation': 'v',
-                    'yanchor': 'middle',
-                    'y': 0.5,
-                    'xanchor': 'left',
-                    'x': 10  # Adjust legend position for moved pie chart
-                },
-                'height': 600,
-                'margin': {'t': 80, 'b': 40, 'l': 10, 'r': 120}  # Adjusted margins - less left margin, more right for legend
-            })
-            
-            fig.update_layout(layout)
-            
-            return self._convert_to_html(fig)
+            # Handle pie/donut charts
+            # Handle pie/donut charts
+            else:
+                hole_size = chart_style.get('hole', 0.4)
+                textinfo = chart_style.get('textinfo', 'label+percent')
+                textposition = chart_style.get('textposition', 'outside')
+                
+                # Build texttemplate based on textinfo configuration
+                if textinfo == 'label+percent':
+                    texttemplate = '%{label}, %{percent}'
+                elif textinfo == 'percent':
+                    texttemplate = '%{percent}'
+                elif textinfo == 'label':
+                    texttemplate = '%{label}'
+                elif textinfo == 'value':
+                    texttemplate = '%{value}'
+                elif textinfo == 'label+value':
+                    texttemplate = '%{label}, %{value}'
+                else:
+                    # Default to label+percent for any other value
+                    texttemplate = '%{label}, %{percent}'
+                
+                fig = go.Figure(data=[go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=hole_size,  # Use configured hole size
+                    marker=dict(colors=colors),
+                    textposition=textposition,  # Use configured text position
+                    texttemplate=texttemplate,  # Dynamic based on textinfo config
+                    textfont=dict(size=11),  # Smaller text to fit better
+                    hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
+                    # Prevent text overlap by using pull for small slices
+                    pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
+                    # Move the pie chart further left to avoid title overlap
+                    domain={'x': [0.0, 0.55], 'y': [0.1, 0.9]}  # Move pie chart further left
+                )])
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': 'Attack Type Distribution',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5,
+                        'y': 0.95  # Keep title high
+                    },
+                    'showlegend': True,
+                    'legend': {
+                        'orientation': 'v',
+                        'yanchor': 'middle',
+                        'y': 0.5,
+                        'xanchor': 'left',
+                        'x': 10  # Adjust legend position for moved pie chart
+                    },
+                    'height': 600,
+                    'margin': {'t': 80, 'b': 40, 'l': 10, 'r': 120}  # Adjusted margins - less left margin, more right for legend
+                })
+                
+                fig.update_layout(layout)
+                
+                return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create attack type pie chart: {e}")
@@ -751,7 +1176,7 @@ class ForensicsVisualizer:
     
     def create_top_source_ips_bar(self, holistic_data: Dict[str, Any], top_n: int = 20) -> str:
         """
-        Create a horizontal bar chart showing top source IPs.
+        Create a bar chart showing top source IPs (supports both vertical and horizontal).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -766,36 +1191,92 @@ class ForensicsVisualizer:
             if not source_ips:
                 return self._create_no_data_chart("Top Source IPs", "No source IP data available")
             
+            # Get chart type and configuration
+            chart_type = self._get_chart_type('top_source_ips')
+            chart_style = self.get_chart_style('top_source_ips', chart_type)
+            
             # Get top IPs (already sorted in data processing)
             top_ips = list(source_ips.items())[:top_n]
+            
+            # Apply sort order from configuration
+            sort_order = chart_style.get('sort_values', 'descending')
+            if sort_order == 'descending':
+                top_ips = sorted(top_ips, key=lambda x: x[1], reverse=True)
+            else:
+                top_ips = sorted(top_ips, key=lambda x: x[1], reverse=False)
             
             ips = [ip[0] for ip in top_ips]
             counts = [ip[1] for ip in top_ips]
             
-            # Reverse for horizontal bar chart (top to bottom)
-            ips.reverse()
-            counts.reverse()
+            # Get configuration options
+            show_values = chart_style.get('show_values', True)
+            values_text_size = chart_style.get('values_text_size', 11)
+            color = self._get_chart_color('top_source_ips', 'primary')
             
-            fig = go.Figure(data=[go.Bar(
-                x=counts,
-                y=ips,
-                orientation='h',
-                marker=dict(color=self._get_chart_color('top_source_ips', 'primary')),
-                hovertemplate='<b>%{y}</b><br>Events: %{x:,}<extra></extra>'
-            )])
-            
-            layout = self.base_layout.copy()
-            layout.update({
-                'title': {
-                    'text': f'Top {min(len(ips), top_n)} Source IP Addresses',
-                    'font': {'size': 18, 'color': '#000000'},
-                    'x': 0.5
-                },
-                'xaxis': {'title': 'Number of Events'},
-                'yaxis': {'title': 'Source IP Address'},
-                'height': max(400, len(ips) * 25),
-                'showlegend': False
-            })
+            if chart_type == 'horizontal_bar':
+                # Horizontal bar chart - reverse for top-to-bottom display
+                ips_reversed = list(reversed(ips))
+                counts_reversed = list(reversed(counts))
+                
+                bar_trace = go.Bar(
+                    x=counts_reversed,
+                    y=ips_reversed,
+                    orientation='h',
+                    marker=dict(color=color),
+                    hovertemplate='<b>%{y}</b><br>Events: %{x:,}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,}' for val in counts_reversed]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Top {min(len(ips), top_n)} Source IP Addresses',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Number of Events'},
+                    'yaxis': {'title': 'Source IP Address'},
+                    'height': max(400, len(ips) * 25),
+                    'showlegend': False
+                })
+            else:
+                # Vertical bar chart
+                bar_trace = go.Bar(
+                    x=ips,
+                    y=counts,
+                    marker=dict(color=color),
+                    hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,}' for val in counts]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                # Add margin if showing values outside
+                if show_values:
+                    self._add_bar_chart_margin(fig, counts, 'bar', True)
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Top {min(len(ips), top_n)} Source IP Addresses',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Source IP Address'},
+                    'yaxis': {'title': 'Number of Events'},
+                    'height': 500,
+                    'showlegend': False
+                })
             
             fig.update_layout(layout)
             
@@ -819,7 +1300,7 @@ class ForensicsVisualizer:
     
     def create_protocol_distribution_chart(self, holistic_data: Dict[str, Any]) -> str:
         """
-        Create a bar chart showing protocol distribution.
+        Create a bar chart showing protocol distribution (supports both vertical and horizontal).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -833,30 +1314,89 @@ class ForensicsVisualizer:
             if not protocols:
                 return self._create_no_data_chart("Protocol Distribution", "No protocol data available")
             
+            # Get chart type and configuration
+            chart_type = self._get_chart_type('protocol_distribution')
+            chart_style = self.get_chart_style('protocol_distribution', chart_type)
+            
+            # Apply sort order from configuration
+            sort_order = chart_style.get('sort_values', 'descending')
+            reverse_sort = (sort_order == 'descending')
+            
             # Sort protocols by count
-            sorted_protocols = sorted(protocols.items(), key=lambda x: x[1], reverse=True)
+            sorted_protocols = sorted(protocols.items(), key=lambda x: x[1], reverse=reverse_sort)
             
             protocol_names = [p[0] for p in sorted_protocols]
             protocol_counts = [p[1] for p in sorted_protocols]
             
-            fig = go.Figure(data=[go.Bar(
-                x=protocol_names,
-                y=protocol_counts,
-                marker=dict(color=self._get_chart_color('protocol_distribution', 'primary')),
-                hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
-            )])
+            # Get configuration options
+            show_values = chart_style.get('show_values', True)
+            values_text_size = chart_style.get('values_text_size', 11)
+            color = self._get_chart_color('protocol_distribution', 'primary')
             
-            layout = self.base_layout.copy()
-            layout.update({
-                'title': {
-                    'text': 'Attack Distribution by Protocol',
-                    'font': {'size': 18, 'color': '#000000'},
-                    'x': 0.5
-                },
-                'xaxis': {'title': 'Protocol'},
-                'yaxis': {'title': 'Number of Events'},
-                'showlegend': False
-            })
+            if chart_type == 'horizontal_bar':
+                # Horizontal bar chart - reverse for top-to-bottom display
+                names_reversed = list(reversed(protocol_names))
+                counts_reversed = list(reversed(protocol_counts))
+                
+                bar_trace = go.Bar(
+                    x=counts_reversed,
+                    y=names_reversed,
+                    orientation='h',
+                    marker=dict(color=color),
+                    hovertemplate='<b>%{y}</b><br>Events: %{x:,}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,}' for val in counts_reversed]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': 'Attack Distribution by Protocol',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Number of Events'},
+                    'yaxis': {'title': 'Protocol'},
+                    'height': max(400, len(protocol_names) * 25),
+                    'showlegend': False
+                })
+            else:
+                # Vertical bar chart
+                bar_trace = go.Bar(
+                    x=protocol_names,
+                    y=protocol_counts,
+                    marker=dict(color=color),
+                    hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,}' for val in protocol_counts]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                # Add margin if showing values outside
+                if show_values:
+                    self._add_bar_chart_margin(fig, protocol_counts, 'bar', True)
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': 'Attack Distribution by Protocol',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Protocol'},
+                    'yaxis': {'title': 'Number of Events'},
+                    'height': 500,
+                    'showlegend': False
+                })
             
             fig.update_layout(layout)
             
@@ -899,16 +1439,31 @@ class ForensicsVisualizer:
             dates = [datetime.strptime(date_str, '%Y-%m-%d') for date_str, _ in sorted_dates]
             counts = [count for _, count in sorted_dates]
             
-            fig = go.Figure(data=[go.Scatter(
+            # Get chart type and style configuration
+            chart_type = self._get_chart_type('daily_timeline')
+            chart_style = self.get_chart_style('daily_timeline', chart_type)
+            
+            # Get configuration values with defaults
+            line_width = chart_style.get('line_width', 2)
+            marker_size = chart_style.get('marker_size', 4)
+            mode = chart_style.get('mode', 'lines+markers')
+            
+            # Create scatter trace based on chart type
+            scatter_trace = go.Scatter(
                 x=dates,
                 y=counts,
-                mode='lines+markers',
-                line=dict(color=self._get_chart_color('daily_timeline', 'primary'), width=2),
-                marker=dict(size=4),
-                fill='tonexty',
-                fillcolor=f'rgba(0, 63, 127, 0.1)',
+                mode=mode,  # Use configured mode
+                line=dict(color=self._get_chart_color('daily_timeline', 'primary'), width=line_width),
+                marker=dict(size=marker_size),
                 hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Events: %{y:,}<extra></extra>'
-            )])
+            )
+            
+            # Add fill ONLY for area chart type
+            if chart_type == 'area':
+                scatter_trace.fill = 'tonexty'
+                scatter_trace.fillcolor = f'rgba(0, 63, 127, 0.1)'
+            
+            fig = go.Figure(data=[scatter_trace])
             
             layout = self.base_layout.copy()
             layout.update({
@@ -1430,7 +1985,7 @@ class ForensicsVisualizer:
     
     def create_top_attacks_by_max_bps_bar(self, holistic_data: Dict[str, Any], top_n: int = 5) -> str:
         """
-        Create a bar chart showing top 5 attacks by maximum BPS.
+        Create a bar chart showing top 5 attacks by maximum BPS (supports both vertical and horizontal).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -1445,8 +2000,16 @@ class ForensicsVisualizer:
             if not attack_max_bps:
                 return self._create_no_data_chart("Top Attacks by Max BPS", "No BPS data available for attacks")
             
+            # Get chart type and configuration
+            chart_type = self._get_chart_type('top_attacks_max_bps')
+            chart_style = self.get_chart_style('top_attacks_max_bps', chart_type)
+            
+            # Apply sort order from configuration
+            sort_order = chart_style.get('sort_values', 'descending')
+            reverse_sort = (sort_order == 'descending')
+            
             # Get top attacks by max BPS
-            top_attacks = sorted(attack_max_bps.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            top_attacks = sorted(attack_max_bps.items(), key=lambda x: x[1], reverse=reverse_sort)[:top_n]
             
             attack_names = [attack[0] for attack in top_attacks]
             max_bps_values = [attack[1] for attack in top_attacks]
@@ -1455,25 +2018,75 @@ class ForensicsVisualizer:
             bandwidth_config = get_bandwidth_unit_config()
             converted_bps = [bps / bandwidth_config['divider'] for bps in max_bps_values]
             
-            fig = go.Figure(data=[go.Bar(
-                x=attack_names,
-                y=converted_bps,
-                marker=dict(color=self._get_chart_color('top_attacks_max_bps', 'primary')),
-                hovertemplate=f'<b>%{{x}}</b><br>Max {bandwidth_config["unit_name"]}: %{{y:,.2f}}<extra></extra>'
-            )])
+            # Get configuration options
+            show_values = chart_style.get('show_values', True)
+            values_text_size = chart_style.get('values_text_size', 11)
+            color = self._get_chart_color('top_attacks_max_bps', 'primary')
             
-            layout = self.base_layout.copy()
-            layout.update({
-                'title': {
-                    'text': f'Top {top_n} Attacks by Maximum {bandwidth_config["unit_name"]}',
-                    'font': {'size': 18, 'color': '#000000'},
-                    'x': 0.5
-                },
-                'xaxis': {'title': 'Attack Name'},
-                'yaxis': {'title': f'Maximum {bandwidth_config["unit_name"]}'},
-                'showlegend': False,
-                'height': 500
-            })
+            if chart_type == 'horizontal_bar':
+                # Horizontal bar chart - reverse for top-to-bottom display
+                names_reversed = list(reversed(attack_names))
+                bps_reversed = list(reversed(converted_bps))
+                
+                bar_trace = go.Bar(
+                    x=bps_reversed,
+                    y=names_reversed,
+                    orientation='h',
+                    marker=dict(color=color),
+                    hovertemplate=f'<b>%{{y}}</b><br>Max {bandwidth_config["unit_name"]}: %{{x:,.2f}}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,.2f}' for val in bps_reversed]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Top {top_n} Attacks by Maximum {bandwidth_config["unit_name"]}',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': f'Maximum {bandwidth_config["unit_name"]}'},
+                    'yaxis': {'title': 'Attack Name'},
+                    'height': max(400, len(attack_names) * 35),
+                    'showlegend': False
+                })
+            else:
+                # Vertical bar chart
+                bar_trace = go.Bar(
+                    x=attack_names,
+                    y=converted_bps,
+                    marker=dict(color=color),
+                    hovertemplate=f'<b>%{{x}}</b><br>Max {bandwidth_config["unit_name"]}: %{{y:,.2f}}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,.2f}' for val in converted_bps]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                # Add margin if showing values outside
+                if show_values:
+                    self._add_bar_chart_margin(fig, converted_bps, 'bar', True)
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Top {top_n} Attacks by Maximum {bandwidth_config["unit_name"]}',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Attack Name'},
+                    'yaxis': {'title': f'Maximum {bandwidth_config["unit_name"]}'},
+                    'height': 500,
+                    'showlegend': False
+                })
             
             fig.update_layout(layout)
             
@@ -1497,7 +2110,7 @@ class ForensicsVisualizer:
     
     def create_top_attacks_by_max_pps_bar(self, holistic_data: Dict[str, Any], top_n: int = 5) -> str:
         """
-        Create a bar chart showing top 5 attacks by maximum PPS.
+        Create a bar chart showing top 5 attacks by maximum PPS (supports both vertical and horizontal).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -1512,31 +2125,89 @@ class ForensicsVisualizer:
             if not attack_max_pps:
                 return self._create_no_data_chart("Top Attacks by Max PPS", "No PPS data available for attacks")
             
+            # Get chart type and configuration
+            chart_type = self._get_chart_type('top_attacks_max_pps')
+            chart_style = self.get_chart_style('top_attacks_max_pps', chart_type)
+            
+            # Apply sort order from configuration
+            sort_order = chart_style.get('sort_values', 'descending')
+            reverse_sort = (sort_order == 'descending')
+            
             # Get top attacks by max PPS
-            top_attacks = sorted(attack_max_pps.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            top_attacks = sorted(attack_max_pps.items(), key=lambda x: x[1], reverse=reverse_sort)[:top_n]
             
             attack_names = [attack[0] for attack in top_attacks]
             max_pps_values = [attack[1] for attack in top_attacks]
             
-            fig = go.Figure(data=[go.Bar(
-                x=attack_names,
-                y=max_pps_values,
-                marker=dict(color=self._get_chart_color('top_attacks_max_pps', 'primary')),
-                hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
-            )])
+            # Get configuration options
+            show_values = chart_style.get('show_values', True)
+            values_text_size = chart_style.get('values_text_size', 11)
+            color = self._get_chart_color('top_attacks_max_pps', 'primary')
             
-            layout = self.base_layout.copy()
-            layout.update({
-                'title': {
-                    'text': f'Top {top_n} Attacks by Maximum PPS',
-                    'font': {'size': 18, 'color': '#000000'},
-                    'x': 0.5
-                },
-                'xaxis': {'title': 'Attack Name'},
-                'yaxis': {'title': 'Maximum PPS'},
-                'showlegend': False,
-                'height': 500
-            })
+            if chart_type == 'horizontal_bar':
+                # Horizontal bar chart - reverse for top-to-bottom display
+                names_reversed = list(reversed(attack_names))
+                pps_reversed = list(reversed(max_pps_values))
+                
+                bar_trace = go.Bar(
+                    x=pps_reversed,
+                    y=names_reversed,
+                    orientation='h',
+                    marker=dict(color=color),
+                    hovertemplate='<b>%{y}</b><br>Max PPS: %{x:,.0f}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,.0f}' for val in pps_reversed]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Top {top_n} Attacks by Maximum PPS',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Maximum PPS'},
+                    'yaxis': {'title': 'Attack Name'},
+                    'height': max(400, len(attack_names) * 35),
+                    'showlegend': False
+                })
+            else:
+                # Vertical bar chart
+                bar_trace = go.Bar(
+                    x=attack_names,
+                    y=max_pps_values,
+                    marker=dict(color=color),
+                    hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
+                )
+                
+                if show_values:
+                    bar_trace.text = [f'{val:,.0f}' for val in max_pps_values]
+                    bar_trace.textposition = 'outside'
+                    bar_trace.textfont = dict(size=values_text_size)
+                
+                fig = go.Figure(data=[bar_trace])
+                
+                # Add margin if showing values outside
+                if show_values:
+                    self._add_bar_chart_margin(fig, max_pps_values, 'bar', True)
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Top {top_n} Attacks by Maximum PPS',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5
+                    },
+                    'xaxis': {'title': 'Attack Name'},
+                    'yaxis': {'title': 'Maximum PPS'},
+                    'height': 500,
+                    'showlegend': False
+                })
             
             fig.update_layout(layout)
             
@@ -1560,7 +2231,7 @@ class ForensicsVisualizer:
     
     def create_security_events_by_policy_pie(self, holistic_data: Dict[str, Any], top_n: int = 10) -> str:
         """
-        Create a pie chart showing security events distribution by policy (top 10).
+        Create a chart showing security events distribution by policy (pie, donut, bar, or horizontal bar).
 
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -1575,8 +2246,16 @@ class ForensicsVisualizer:
             if not policies:
                 return self._create_no_data_chart("Security Events by Policy", "No policy data available")
             
+            # Get chart type and style configuration first to check sort order
+            chart_type = self._get_chart_type('policy_distribution')
+            chart_style = self.get_chart_style('policy_distribution', chart_type)
+            
+            # Apply sort order from configuration
+            sort_order = chart_style.get('sort_values', 'descending')
+            reverse_sort = (sort_order == 'descending')
+            
             # Get top policies by event count
-            sorted_policies = sorted(policies.items(), key=lambda x: x[1], reverse=True)
+            sorted_policies = sorted(policies.items(), key=lambda x: x[1], reverse=reverse_sort)
             top_policies = sorted_policies[:top_n]
             
             # Group remaining policies as "Others"
@@ -1591,46 +2270,157 @@ class ForensicsVisualizer:
             if len(colors) < len(labels):
                 colors.extend(self.active_palette[len(colors):len(labels)])
             
-            fig = go.Figure(data=[go.Pie(
-                labels=labels,
-                values=values,
-                hole=0.4,  # Larger hole to make pie smaller
-                marker=dict(colors=colors),
-                textposition='outside',
-                texttemplate='%{label}, %{percent}',  # Single line with comma separation
-                textfont=dict(size=11),  # Smaller text to fit better
-                hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
-                # Improved text positioning for better visibility
-                textinfo='label+percent',
-                # Prevent text overlap by using pull for small slices
-                pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
-                # Move the pie chart further left to avoid title overlap
-                domain={'x': [0.0, 0.55], 'y': [0.1, 0.9]}  # Move pie chart further left
-            )])
+            # Handle bar charts
+            if chart_type in ['bar', 'horizontal_bar']:
+                orientation = chart_style.get('orientation', 'vertical')
+                show_values = chart_style.get('show_values', True)
+                values_text_size = chart_style.get('values_text_size', 11)
+                
+                if orientation == 'horizontal':
+                    # Horizontal bar chart - reverse order so top value is at top
+                    labels_reversed = list(reversed(labels))
+                    values_reversed = list(reversed(values))
+                    colors_reversed = list(reversed(colors))
+                    
+                    bar_trace = go.Bar(
+                        x=values_reversed,
+                        y=labels_reversed,
+                        orientation='h',
+                        marker=dict(color=colors_reversed),
+                        hovertemplate='<b>%{y}</b><br>Events: %{x:,}<extra></extra>'
+                    )
+                    
+                    if show_values:
+                        bar_trace.text = [f'{val:,}' for val in values_reversed]
+                        bar_trace.textposition = 'outside'
+                        bar_trace.textfont = dict(size=values_text_size)
+                    
+                    fig = go.Figure(data=[bar_trace])
+                    
+                    layout = self.base_layout.copy()
+                    layout.update({
+                        'title': {
+                            'text': f'Security Events by Policy (Top {top_n})',
+                            'font': {'size': 18, 'color': '#000000'},
+                            'x': 0.5
+                        },
+                        'xaxis': {'title': 'Number of Events'},
+                        'yaxis': {'title': 'Policy'},
+                        'showlegend': False,
+                        'height': max(400, len(labels) * 40)  # Dynamic height based on number of items
+                    })
+                    
+                    fig.update_layout(layout)
+                    fig.update_xaxes(fixedrange=True)
+                    fig.update_yaxes(fixedrange=True)
+                    
+                else:
+                    # Vertical bar chart
+                    bar_trace = go.Bar(
+                        x=labels,
+                        y=values,
+                        marker=dict(color=colors),
+                        hovertemplate='<b>%{x}</b><br>Events: %{y:,}<extra></extra>'
+                    )
+                    
+                    if show_values:
+                        bar_trace.text = [f'{val:,}' for val in values]
+                        bar_trace.textposition = 'outside'
+                        bar_trace.textfont = dict(size=values_text_size)
+                    
+                    fig = go.Figure(data=[bar_trace])
+                    
+                    # Add margin for bar charts with outside text
+                    max_value = max(values) if values else 0
+                    
+                    layout = self.base_layout.copy()
+                    layout.update({
+                        'title': {
+                            'text': f'Security Events by Policy (Top {top_n})',
+                            'font': {'size': 18, 'color': '#000000'},
+                            'x': 0.5
+                        },
+                        'xaxis': {'title': 'Policy'},
+                        'yaxis': {
+                            'title': 'Number of Events',
+                            'range': [0, max_value * 1.15] if show_values and max_value > 0 else None
+                        },
+                        'showlegend': False,
+                        'height': 500
+                    })
+                    
+                    fig.update_layout(layout)
+                    fig.update_xaxes(fixedrange=True)
+                    fig.update_yaxes(fixedrange=True)
+                
+                bar_config = {
+                    'displayModeBar': False,
+                    'responsive': True,
+                    'scrollZoom': False,
+                    'doubleClick': False
+                }
+                
+                return self._convert_to_html(fig, bar_config)
             
-            layout = self.base_layout.copy()
-            layout.update({
-                'title': {
-                    'text': f'Security Events by Policy (Top {top_n})',
-                    'font': {'size': 18, 'color': '#000000'},
-                    'x': 0.5,
-                    'y': 0.95  # Keep title high
-                },
-                'showlegend': True,
-                'legend': {
-                    'orientation': 'v',
-                    'yanchor': 'middle',
-                    'y': 0.5,
-                    'xanchor': 'left',
-                    'x': 0.65  # Adjust legend position for moved pie chart
-                },
-                'height': 600,
-                'margin': {'t': 80, 'b': 40, 'l': 10, 'r': 120}  # Adjusted margins - less left margin, more right for legend
-            })
-            
-            fig.update_layout(layout)
-            
-            return self._convert_to_html(fig)
+            # Handle pie/donut charts
+            else:
+                hole_size = chart_style.get('hole', 0.4)
+                textinfo = chart_style.get('textinfo', 'label+percent')
+                textposition = chart_style.get('textposition', 'outside')
+                
+                # Build texttemplate based on textinfo configuration
+                if textinfo == 'label+percent':
+                    texttemplate = '%{label}, %{percent}'
+                elif textinfo == 'percent':
+                    texttemplate = '%{percent}'
+                elif textinfo == 'label':
+                    texttemplate = '%{label}'
+                elif textinfo == 'value':
+                    texttemplate = '%{value}'
+                elif textinfo == 'label+value':
+                    texttemplate = '%{label}, %{value}'
+                else:
+                    # Default to label+percent for any other value
+                    texttemplate = '%{label}, %{percent}'
+                
+                fig = go.Figure(data=[go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=hole_size,  # Use configured hole size
+                    marker=dict(colors=colors),
+                    textposition=textposition,  # Use configured text position
+                    texttemplate=texttemplate,  # Dynamic based on textinfo config
+                    textfont=dict(size=11),  # Smaller text to fit better
+                    hovertemplate='<b>%{label}</b><br>Events: %{value:,}<br>Percentage: %{percent}<extra></extra>',
+                    # Prevent text overlap by using pull for small slices
+                    pull=[0.1 if value / sum(values) < 0.05 else 0 for value in values],
+                    # Move the pie chart further left to avoid title overlap
+                    domain={'x': [0.0, 0.55], 'y': [0.1, 0.9]}  # Move pie chart further left
+                )])
+                
+                layout = self.base_layout.copy()
+                layout.update({
+                    'title': {
+                        'text': f'Security Events by Policy (Top {top_n})',
+                        'font': {'size': 18, 'color': '#000000'},
+                        'x': 0.5,
+                        'y': 0.95  # Keep title high
+                    },
+                    'showlegend': True,
+                    'legend': {
+                        'orientation': 'v',
+                        'yanchor': 'middle',
+                        'y': 0.5,
+                        'xanchor': 'left',
+                        'x': 0.65  # Adjust legend position for moved pie chart
+                    },
+                    'height': 600,
+                    'margin': {'t': 80, 'b': 40, 'l': 10, 'r': 120}  # Adjusted margins - less left margin, more right for legend
+                })
+                
+                fig.update_layout(layout)
+                
+                return self._convert_to_html(fig)
             
         except Exception as e:
             logger.error(f"Failed to create security events by policy pie chart: {e}")
