@@ -138,7 +138,7 @@ def detect_date_format(sample_dates: List[str]) -> Optional[str]:
         Most likely format string or None
     """
     from datetime import datetime
-    from config_b import FORCE_DATE_FORMAT
+    from config import FORCE_DATE_FORMAT
     
     # Check for forced format override
     if FORCE_DATE_FORMAT:
@@ -962,7 +962,7 @@ def get_active_color_palette():
     Returns:
         List of color strings from the active palette
     """
-    from config_b import COLOR_PALETTES, ACTIVE_COLOR_PALETTE
+    from config import COLOR_PALETTES, ACTIVE_COLOR_PALETTE
     return COLOR_PALETTES.get(ACTIVE_COLOR_PALETTE, COLOR_PALETTES['radware_corporate'])
 
 
@@ -976,7 +976,7 @@ def get_chart_colors(chart_name):
     Returns:
         List of color strings or dict of color assignments
     """
-    from config_b import CHART_COLOR_ASSIGNMENTS
+    from config import CHART_COLOR_ASSIGNMENTS
     
     chart_colors = CHART_COLOR_ASSIGNMENTS.get(f'{chart_name}_colors', {})
     if not chart_colors or chart_colors.get('use_palette', True):
@@ -991,5 +991,5 @@ def get_bandwidth_unit_config():
     Returns:
         Dict with bandwidth unit configuration
     """
-    from config_b import BANDWIDTH_UNIT_CONFIGS, VOLUME_UNIT
+    from config import BANDWIDTH_UNIT_CONFIGS, VOLUME_UNIT
     return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])

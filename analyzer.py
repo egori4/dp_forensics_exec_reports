@@ -43,7 +43,7 @@ from utils import (
 )
 from data_processor import ForensicsDataProcessor
 from report_generator import ReportGenerator
-from config_b import REQUIRED_COLUMNS, OUTPUT_FORMATS
+from config import REQUIRED_COLUMNS, OUTPUT_FORMATS
 
 logger = logging.getLogger(__name__)
 

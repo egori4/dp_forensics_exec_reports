@@ -30,7 +30,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 from datetime import datetime, timedelta
 
-from config_b import (
+from config import (
     CHART_COLOR_ASSIGNMENTS, CHART_PREFERENCES, CHART_CONFIG, CHART_LAYOUT,
     VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS,
     CHART_PLOTLYJS_MODE

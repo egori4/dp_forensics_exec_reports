@@ -19,7 +19,7 @@ from utils import (
     check_memory_usage, format_file_size, validate_csv_structure,
     detect_file_encoding, format_number
 )
-from config_b import CHUNK_SIZE, REQUIRED_COLUMNS, EXPECTED_COLUMNS, EXCLUDE_FILTERS
+from config import CHUNK_SIZE, REQUIRED_COLUMNS, EXPECTED_COLUMNS, EXCLUDE_FILTERS
 
 logger = logging.getLogger(__name__)
 
