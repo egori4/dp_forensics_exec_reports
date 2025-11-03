@@ -30,7 +30,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 from datetime import datetime, timedelta
 
-from config import (
+from config_b import (
     CHART_COLOR_ASSIGNMENTS, CHART_PREFERENCES, CHART_CONFIG, CHART_LAYOUT,
     VOLUME_UNIT, VOLUME_UNIT_CONFIGS, PACKET_UNIT, PACKET_UNIT_CONFIGS,
     CHART_PLOTLYJS_MODE
@@ -1985,7 +1985,7 @@ class ForensicsVisualizer:
     
     def create_top_attacks_by_max_bps_bar(self, holistic_data: Dict[str, Any], top_n: int = 5) -> str:
         """
-        Create a bar chart showing top 5 attacks by maximum BPS (supports both vertical and horizontal).
+        Create a bar chart showing top N individual attacks by maximum BPS (supports both vertical and horizontal).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -1995,9 +1995,9 @@ class ForensicsVisualizer:
             HTML string of the chart
         """
         try:
-            attack_max_bps = holistic_data.get('attack_max_bps', {})
+            top_attacks_list = holistic_data.get('top_attacks_by_bps', [])
             
-            if not attack_max_bps:
+            if not top_attacks_list:
                 return self._create_no_data_chart("Top Attacks by Max BPS", "No BPS data available for attacks")
             
             # Get chart type and configuration
@@ -2006,13 +2006,26 @@ class ForensicsVisualizer:
             
             # Apply sort order from configuration
             sort_order = chart_style.get('sort_values', 'descending')
-            reverse_sort = (sort_order == 'descending')
+            if sort_order == 'ascending':
+                top_attacks_list = sorted(top_attacks_list, key=lambda x: x[1])[:top_n]
+            else:
+                top_attacks_list = top_attacks_list[:top_n]  # Already sorted descending
             
-            # Get top attacks by max BPS
-            top_attacks = sorted(attack_max_bps.items(), key=lambda x: x[1], reverse=reverse_sort)[:top_n]
-            
-            attack_names = [attack[0] for attack in top_attacks]
-            max_bps_values = [attack[1] for attack in top_attacks]
+            # Extract attack names and BPS values
+            # Make labels unique by adding invisible zero-width spaces to prevent stacking
+            attack_labels = []
+            max_bps_values = []
+            hover_texts = []
+            for idx, (attack_name, bps, details) in enumerate(top_attacks_list):
+                # Add invisible zero-width spaces to make each label unique (prevents bar stacking)
+                # These are invisible but make Plotly treat each bar as separate
+                unique_label = attack_name + ('\u200b' * idx)  # Zero-width space
+                attack_labels.append(unique_label)
+                max_bps_values.append(bps)
+                # Build hover text with timestamp
+                start_time = details.get('start_time', 'N/A')
+                hover_text = f"<b>{attack_name}</b><br>Time: {start_time}"
+                hover_texts.append(hover_text)
             
             # Convert to configured bandwidth unit
             bandwidth_config = get_bandwidth_unit_config()
@@ -2025,15 +2038,17 @@ class ForensicsVisualizer:
             
             if chart_type == 'horizontal_bar':
                 # Horizontal bar chart - reverse for top-to-bottom display
-                names_reversed = list(reversed(attack_names))
+                names_reversed = list(reversed(attack_labels))
                 bps_reversed = list(reversed(converted_bps))
+                hover_reversed = list(reversed(hover_texts))
                 
                 bar_trace = go.Bar(
                     x=bps_reversed,
                     y=names_reversed,
                     orientation='h',
                     marker=dict(color=color),
-                    hovertemplate=f'<b>%{{y}}</b><br>Max {bandwidth_config["unit_name"]}: %{{x:,.2f}}<extra></extra>'
+                    hovertext=hover_reversed,
+                    hovertemplate=f'%{{hovertext}}<br>Max {bandwidth_config["unit_name"]}: %{{x:,.2f}}<extra></extra>'
                 )
                 
                 if show_values:
@@ -2052,16 +2067,17 @@ class ForensicsVisualizer:
                     },
                     'xaxis': {'title': f'Maximum {bandwidth_config["unit_name"]}'},
                     'yaxis': {'title': 'Attack Name'},
-                    'height': max(400, len(attack_names) * 35),
+                    'height': max(400, len(attack_labels) * 35),
                     'showlegend': False
                 })
             else:
                 # Vertical bar chart
                 bar_trace = go.Bar(
-                    x=attack_names,
+                    x=attack_labels,
                     y=converted_bps,
                     marker=dict(color=color),
-                    hovertemplate=f'<b>%{{x}}</b><br>Max {bandwidth_config["unit_name"]}: %{{y:,.2f}}<extra></extra>'
+                    hovertext=hover_texts,
+                    hovertemplate=f'%{{hovertext}}<br>Max {bandwidth_config["unit_name"]}: %{{y:,.2f}}<extra></extra>'
                 )
                 
                 if show_values:
@@ -2110,7 +2126,7 @@ class ForensicsVisualizer:
     
     def create_top_attacks_by_max_pps_bar(self, holistic_data: Dict[str, Any], top_n: int = 5) -> str:
         """
-        Create a bar chart showing top 5 attacks by maximum PPS (supports both vertical and horizontal).
+        Create a bar chart showing top N individual attacks by maximum PPS (supports both vertical and horizontal).
         
         Args:
             holistic_data: Dictionary with holistic analysis data
@@ -2120,9 +2136,9 @@ class ForensicsVisualizer:
             HTML string of the chart
         """
         try:
-            attack_max_pps = holistic_data.get('attack_max_pps', {})
+            top_attacks_list = holistic_data.get('top_attacks_by_pps', [])
             
-            if not attack_max_pps:
+            if not top_attacks_list:
                 return self._create_no_data_chart("Top Attacks by Max PPS", "No PPS data available for attacks")
             
             # Get chart type and configuration
@@ -2131,13 +2147,26 @@ class ForensicsVisualizer:
             
             # Apply sort order from configuration
             sort_order = chart_style.get('sort_values', 'descending')
-            reverse_sort = (sort_order == 'descending')
+            if sort_order == 'ascending':
+                top_attacks_list = sorted(top_attacks_list, key=lambda x: x[1])[:top_n]
+            else:
+                top_attacks_list = top_attacks_list[:top_n]  # Already sorted descending
             
-            # Get top attacks by max PPS
-            top_attacks = sorted(attack_max_pps.items(), key=lambda x: x[1], reverse=reverse_sort)[:top_n]
-            
-            attack_names = [attack[0] for attack in top_attacks]
-            max_pps_values = [attack[1] for attack in top_attacks]
+            # Extract attack names and PPS values
+            # Make labels unique by adding invisible zero-width spaces to prevent stacking
+            attack_labels = []
+            max_pps_values = []
+            hover_texts = []
+            for idx, (attack_name, pps, details) in enumerate(top_attacks_list):
+                # Add invisible zero-width spaces to make each label unique (prevents bar stacking)
+                # These are invisible but make Plotly treat each bar as separate
+                unique_label = attack_name + ('\u200b' * idx)  # Zero-width space
+                attack_labels.append(unique_label)
+                max_pps_values.append(pps)
+                # Build hover text with timestamp
+                start_time = details.get('start_time', 'N/A')
+                hover_text = f"<b>{attack_name}</b><br>Time: {start_time}"
+                hover_texts.append(hover_text)
             
             # Get configuration options
             show_values = chart_style.get('show_values', True)
@@ -2146,15 +2175,17 @@ class ForensicsVisualizer:
             
             if chart_type == 'horizontal_bar':
                 # Horizontal bar chart - reverse for top-to-bottom display
-                names_reversed = list(reversed(attack_names))
+                names_reversed = list(reversed(attack_labels))
                 pps_reversed = list(reversed(max_pps_values))
+                hover_reversed = list(reversed(hover_texts))
                 
                 bar_trace = go.Bar(
                     x=pps_reversed,
                     y=names_reversed,
                     orientation='h',
                     marker=dict(color=color),
-                    hovertemplate='<b>%{y}</b><br>Max PPS: %{x:,.0f}<extra></extra>'
+                    hovertext=hover_reversed,
+                    hovertemplate='%{hovertext}<br>Max PPS: %{x:,.0f}<extra></extra>'
                 )
                 
                 if show_values:
@@ -2173,16 +2204,17 @@ class ForensicsVisualizer:
                     },
                     'xaxis': {'title': 'Maximum PPS'},
                     'yaxis': {'title': 'Attack Name'},
-                    'height': max(400, len(attack_names) * 35),
+                    'height': max(400, len(attack_labels) * 35),
                     'showlegend': False
                 })
             else:
                 # Vertical bar chart
                 bar_trace = go.Bar(
-                    x=attack_names,
+                    x=attack_labels,
                     y=max_pps_values,
                     marker=dict(color=color),
-                    hovertemplate='<b>%{x}</b><br>Max PPS: %{y:,.0f}<extra></extra>'
+                    hovertext=hover_texts,
+                    hovertemplate='%{hovertext}<br>Max PPS: %{y:,.0f}<extra></extra>'
                 )
                 
                 if show_values:

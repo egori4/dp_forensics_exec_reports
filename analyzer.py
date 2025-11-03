@@ -20,6 +20,21 @@ from pathlib import Path
 from typing import List, Dict, Any
 import time
 from datetime import datetime
+import shutil
+
+# Check if config.py exists, if not create it from config_example.py
+config_path = Path(__file__).parent / 'config.py'
+config_example_path = Path(__file__).parent / 'config_example.py'
+
+if not config_path.exists():
+    if config_example_path.exists():
+        print(f"⚙️  Creating config.py from config_example.py...")
+        shutil.copy2(config_example_path, config_path)
+        print(f"✅ config.py created successfully!")
+    else:
+        print(f"❌ ERROR: config_example.py not found!")
+        print(f"   Please ensure config_example.py exists in the script directory.")
+        sys.exit(1)
 
 # Import our modules
 from utils import (
@@ -28,7 +43,7 @@ from utils import (
 )
 from data_processor import ForensicsDataProcessor
 from report_generator import ReportGenerator
-from config import REQUIRED_COLUMNS, OUTPUT_FORMATS
+from config_b import REQUIRED_COLUMNS, OUTPUT_FORMATS
 
 logger = logging.getLogger(__name__)
 

@@ -15,7 +15,7 @@ import chardet
 import psutil
 from dateutil import parser as date_parser
 
-from config import DATE_FORMATS, MAX_MEMORY_USAGE_GB
+from config_b import DATE_FORMATS, MAX_MEMORY_USAGE_GB
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ def detect_date_format(sample_dates: List[str]) -> Optional[str]:
         Most likely format string or None
     """
     from datetime import datetime
-    from config import FORCE_DATE_FORMAT
+    from config_b import FORCE_DATE_FORMAT
     
     # Check for forced format override
     if FORCE_DATE_FORMAT:
@@ -366,7 +366,9 @@ def get_complete_months(start_date: datetime, end_date: datetime,
             month_end = datetime(current_month.year, current_month.month + 1, 1) - timedelta(seconds=1)
         
         # Check if this is a complete month within our data range
-        month_fully_in_range = (current_month >= start_date and month_end <= end_date)
+        # Month is complete if it starts after/at data start AND the month's last day is within the data range
+        # We check if month_end.date() <= end_date.date() to handle cases where end_date might be 23:58:32 on the last day
+        month_fully_in_range = (current_month >= start_date and month_end.date() <= end_date.date())
         
         if month_fully_in_range:
             complete_months.append((current_month, month_end))
@@ -960,7 +962,7 @@ def get_active_color_palette():
     Returns:
         List of color strings from the active palette
     """
-    from config import COLOR_PALETTES, ACTIVE_COLOR_PALETTE
+    from config_b import COLOR_PALETTES, ACTIVE_COLOR_PALETTE
     return COLOR_PALETTES.get(ACTIVE_COLOR_PALETTE, COLOR_PALETTES['radware_corporate'])
 
 
@@ -974,7 +976,7 @@ def get_chart_colors(chart_name):
     Returns:
         List of color strings or dict of color assignments
     """
-    from config import CHART_COLOR_ASSIGNMENTS
+    from config_b import CHART_COLOR_ASSIGNMENTS
     
     chart_colors = CHART_COLOR_ASSIGNMENTS.get(f'{chart_name}_colors', {})
     if not chart_colors or chart_colors.get('use_palette', True):
@@ -989,5 +991,5 @@ def get_bandwidth_unit_config():
     Returns:
         Dict with bandwidth unit configuration
     """
-    from config import BANDWIDTH_UNIT_CONFIGS, VOLUME_UNIT
+    from config_b import BANDWIDTH_UNIT_CONFIGS, VOLUME_UNIT
     return BANDWIDTH_UNIT_CONFIGS.get(VOLUME_UNIT, BANDWIDTH_UNIT_CONFIGS['GB'])

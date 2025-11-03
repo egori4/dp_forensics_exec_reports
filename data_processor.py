@@ -19,7 +19,7 @@ from utils import (
     check_memory_usage, format_file_size, validate_csv_structure,
     detect_file_encoding, format_number
 )
-from config import CHUNK_SIZE, REQUIRED_COLUMNS, EXPECTED_COLUMNS, EXCLUDE_FILTERS
+from config_b import CHUNK_SIZE, REQUIRED_COLUMNS, EXPECTED_COLUMNS, EXCLUDE_FILTERS
 
 logger = logging.getLogger(__name__)
 
@@ -774,8 +774,8 @@ class ForensicsDataProcessor:
             'longest_attack_details': None,  # Will store full details of the longest attack
             'top_source_ips': {},
             'top_dest_ips': {},
-            'attack_max_bps': {},  # Track max BPS per attack type
-            'attack_max_pps': {},  # Track max PPS per attack type
+            'top_attacks_by_bps': [],  # List of (attack_name, bps, details) tuples for individual attacks
+            'top_attacks_by_pps': [],  # List of (attack_name, pps, details) tuples for individual attacks
             'date_range': {
                 'start': self.data_start_date,
                 'end': self.data_end_date,
@@ -877,6 +877,19 @@ class ForensicsDataProcessor:
                 sorted(holistic_stats['top_dest_ips'].items(), key=lambda x: x[1], reverse=True)[:20]
             )
             
+            # Sort and keep only top N attacks by BPS and PPS
+            holistic_stats['top_attacks_by_bps'] = sorted(
+                holistic_stats['top_attacks_by_bps'], 
+                key=lambda x: x[1], 
+                reverse=True
+            )[:100]  # Keep top 100 for flexibility
+            
+            holistic_stats['top_attacks_by_pps'] = sorted(
+                holistic_stats['top_attacks_by_pps'], 
+                key=lambda x: x[1], 
+                reverse=True
+            )[:100]  # Keep top 100 for flexibility
+            
             # Format longest attack duration
             if holistic_stats['longest_attack_details']:
                 max_duration_seconds = holistic_stats['longest_attack_details']['duration']
@@ -961,37 +974,54 @@ class ForensicsDataProcessor:
                     if ip and str(ip) != 'nan':
                         stats['top_dest_ips'][ip] = stats['top_dest_ips'].get(ip, 0) + 1
             
-            # Track max BPS and PPS per attack type
+            # Track top individual attacks by BPS and PPS
             if 'Attack Name' in chunk.columns:
-                attack_names = chunk['Attack Name'].to_list()
-                
-                # Process Max BPS per attack
                 column_mapping = self._create_column_mapping(chunk.columns)
+                
+                # Process individual attacks by Max BPS
                 max_bps_col = column_mapping.get('Max bps')
                 if max_bps_col and max_bps_col in chunk.columns:
-                    max_bps_values = chunk[max_bps_col].to_list()
-                    for attack, bps_val in zip(attack_names, max_bps_values):
-                        if attack and str(attack) != 'nan' and bps_val and str(bps_val) != 'nan':
+                    for i in range(len(chunk)):
+                        row = chunk[i]
+                        attack_name = row['Attack Name'][0] if 'Attack Name' in chunk.columns else None
+                        bps_val = row[max_bps_col][0] if max_bps_col in chunk.columns else None
+                        
+                        if attack_name and str(attack_name) != 'nan' and bps_val and str(bps_val) != 'nan':
                             try:
                                 bps_float = float(bps_val)
-                                current_max = stats['attack_max_bps'].get(attack, 0)
-                                if bps_float > current_max:
-                                    stats['attack_max_bps'][attack] = bps_float
-                            except (ValueError, TypeError):
+                                # Extract minimal details for this attack
+                                details = {
+                                    'attack_name': attack_name,
+                                    'bps': bps_float,
+                                    'start_time': row['Start Time'][0] if 'Start Time' in chunk.columns else None,
+                                    'source_ip': row['Source IP Address'][0] if 'Source IP Address' in chunk.columns else None,
+                                    'dest_ip': row['Destination IP Address'][0] if 'Destination IP Address' in chunk.columns else None,
+                                }
+                                stats['top_attacks_by_bps'].append((attack_name, bps_float, details))
+                            except (ValueError, TypeError, IndexError):
                                 continue
                 
-                # Process Max PPS per attack
+                # Process individual attacks by Max PPS
                 max_pps_col = column_mapping.get('Max pps')
                 if max_pps_col and max_pps_col in chunk.columns:
-                    max_pps_values = chunk[max_pps_col].to_list()
-                    for attack, pps_val in zip(attack_names, max_pps_values):
-                        if attack and str(attack) != 'nan' and pps_val and str(pps_val) != 'nan':
+                    for i in range(len(chunk)):
+                        row = chunk[i]
+                        attack_name = row['Attack Name'][0] if 'Attack Name' in chunk.columns else None
+                        pps_val = row[max_pps_col][0] if max_pps_col in chunk.columns else None
+                        
+                        if attack_name and str(attack_name) != 'nan' and pps_val and str(pps_val) != 'nan':
                             try:
                                 pps_float = float(pps_val)
-                                current_max = stats['attack_max_pps'].get(attack, 0)
-                                if pps_float > current_max:
-                                    stats['attack_max_pps'][attack] = pps_float
-                            except (ValueError, TypeError):
+                                # Extract minimal details for this attack
+                                details = {
+                                    'attack_name': attack_name,
+                                    'pps': pps_float,
+                                    'start_time': row['Start Time'][0] if 'Start Time' in chunk.columns else None,
+                                    'source_ip': row['Source IP Address'][0] if 'Source IP Address' in chunk.columns else None,
+                                    'dest_ip': row['Destination IP Address'][0] if 'Destination IP Address' in chunk.columns else None,
+                                }
+                                stats['top_attacks_by_pps'].append((attack_name, pps_float, details))
+                            except (ValueError, TypeError, IndexError):
                                 continue
         
         except Exception as e:

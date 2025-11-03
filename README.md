@@ -30,12 +30,25 @@ A professional Python-based tool that processes DefensePro forensics data from C
    cd SE_new_report
    ```
 
-2. **Install dependencies**
+2. **Create your configuration file**
+   
+   The script will automatically create `config.py` from `config_example.py` on first run. Alternatively, you can create it manually:
+   ```bash
+   # Windows PowerShell
+   Copy-Item config_example.py config.py
+   
+   # Linux/Mac
+   cp config_example.py config.py
+   ```
+   
+   > **Note**: `config.py` is not tracked by git, so your custom settings will remain local.
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Install Playwright for PDF generation** (optional but recommended)
+4. **Install Playwright for PDF generation** (optional but recommended)
    ```bash
    playwright install chromium
    ```
@@ -53,7 +66,16 @@ A professional Python-based tool that processes DefensePro forensics data from C
    source forensics_env/bin/activate
    ```
 
-2. **Install dependencies**
+2. **Create your configuration file**
+   ```bash
+   # Windows PowerShell
+   Copy-Item config_example.py config.py
+   
+   # Linux/Mac
+   cp config_example.py config.py
+   ```
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    playwright install chromium
@@ -80,7 +102,8 @@ SE_new_report/
 ├── report_generator.py      # HTML/PDF generation
 ├── visualizations.py        # Chart creation logic
 ├── utils.py                 # Helper functions
-├── config.py               # Configuration constants
+├── config_example.py        # Configuration template (tracked in git)
+├── config.py               # Your configuration (auto-created, not tracked)
 ├── requirements.txt        # Python dependencies
 ├── README.md               # This file
 ├── forensics_input/        # Input directory (place files here)
@@ -164,6 +187,12 @@ Reports are generated in the `report_files/` directory:
 - Data quality and methodology notes
 
 ## 🔧 Configuration
+
+### Configuration File Setup
+
+The tool uses `config.py` for all settings. On first run, this file is automatically created from `config_example.py` if it doesn't exist. Your `config.py` file is not tracked by git, allowing you to maintain custom settings without affecting version control.
+
+To reset to default settings, simply delete `config.py` and run the script again, or manually copy from `config_example.py`.
 
 ### Performance Tuning
 
@@ -326,6 +355,7 @@ This tool is designed for internal use with DefensePro forensics data. Please en
 
 | Version | Change/Fixes/Features                                                                      |
 |---------|--------------------------------------------------------------------------------------------|
+| v2.0.3  | - 11/3/25 - Fixed 2 charts - Top 5 Attacks by Max Bandwidth and PPS. Added config_example.py and removed config.py from git tracking. Enhanced identification of the last full month.  |
 | v2.0.2  | - 10/24/25 - Fixed CHART_PREFERENCES variables |
 | v2.0.1  | - 10/24/25 - Major UX Enhancement: Added user-configurable control for chart types, layouts, and colors. Improved config.py architecture for intuitive customization. Introduced color palettes with individual chart override support if needed. Updated documentation with customization examples. |
 | v2.0.0  | - 10/23/25 - Added new charts: 1.Top 5 attacks by Gbps 2. Top 5 attacks by PPS 3. Security Events by Policy  |
