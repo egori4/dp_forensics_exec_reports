@@ -15,7 +15,7 @@ import chardet
 import psutil
 from dateutil import parser as date_parser
 
-from config_b import DATE_FORMATS, MAX_MEMORY_USAGE_GB
+from config import DATE_FORMATS, MAX_MEMORY_USAGE_GB
 
 logger = logging.getLogger(__name__)
 
