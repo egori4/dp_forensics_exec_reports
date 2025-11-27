@@ -107,7 +107,7 @@ class ForensicsDataProcessor:
                 'is_large_file': file_size > 100 * 1024 * 1024  # > 100MB
             }
             
-            logger.info(f"File analysis complete: {analysis['estimated_rows']:,} estimated rows")
+            # logger.info(f"File analysis complete: {analysis['estimated_rows']:,} estimated rows")
             return analysis
             
         except Exception as e:
